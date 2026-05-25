@@ -92,7 +92,7 @@ local/
 .cursorignore
 
 
-character_data/
+data/
 
 .agent/
 
