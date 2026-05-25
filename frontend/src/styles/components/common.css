@@ -1,0 +1,245 @@
+/* =============================================================================
+   Component-Specific Styles
+   Sidebars, Profiles, Chat History - 컴포넌트별 스타일만
+   
+   주의: Header, Navigation, Layout, Button, Card 등 공통 스타일은 
+         globals/common.css에서 관리합니다
+============================================================================= */
+
+/* ============================================================================= 
+   USER PROFILE CONTAINER
+============================================================================= */
+.user-profile-container {
+    background: white;
+    border-radius: 15px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+    overflow: hidden;
+}
+
+.profile-section {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.profile-avatar {
+    width: 60px;
+    height: 60px;
+    background: linear-gradient(135deg, var(--primary-color), #ff8fa3);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    color: white;
+    box-shadow: 0 4px 10px rgba(255, 105, 180, 0.3);
+    margin: 0 auto;
+}
+
+.profile-info {
+    text-align: center;
+}
+
+.profile-name-section {
+    margin-bottom: 10px;
+}
+
+.profile-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 5px;
+}
+
+.profile-server {
+    font-size: 12px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+}
+
+.server-icon {
+    width: 8px;
+    height: 8px;
+    background: #4CAF50;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.divider {
+    height: 1px;
+    background: var(--border-gray);
+    margin: 10px 0;
+}
+
+.profile-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--background-light);
+    border-radius: 8px;
+}
+
+.stat-label {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.stat-value {
+    font-size: 14px;
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.detail-link {
+    text-align: center;
+    color: var(--primary-color);
+    font-size: 13px;
+    cursor: pointer;
+    padding: 8px;
+    transition: var(--transition-fast);
+}
+
+.detail-link:hover {
+    color: var(--primary-dark);
+    text-decoration: underline;
+}
+
+.profile-actions {
+    padding: 15px 20px;
+    border-top: 1px solid var(--border-gray);
+}
+
+/* ============================================================================= 
+   CHAT HISTORY CONTAINER
+============================================================================= */
+
+.chat-history-container {
+    background: white;
+    border-radius: 15px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+    overflow: hidden;
+}
+
+.chat-history-header {
+    background: var(--primary-color);
+    color: white;
+    padding: 12px 20px;
+    font-weight: 600;
+    font-size: 14px;
+    text-align: center;
+}
+
+.chat-history-content {
+    padding: 15px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.chat-history-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.chat-history-content::-webkit-scrollbar-thumb {
+    background-color: rgba(0,0,0,0.1);
+    border-radius: 3px;
+}
+
+.history-item {
+    padding: 12px;
+    margin-bottom: 8px;
+    background: var(--background-light);
+    border-radius: 10px;
+    border: 1px solid var(--border-light);
+    transition: all 0.2s ease;
+}
+
+.history-item:hover {
+    background: #ffe4e9;
+    border-color: var(--primary-color);
+    transform: translateX(4px);
+}
+
+.history-date {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
+
+.history-text {
+    font-size: 13px;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+/* ============================================================================= 
+   SIDEBAR AD
+============================================================================= */
+
+.sidebar-ad-long {
+    background: white;
+    border-radius: 15px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+    overflow: hidden;
+    min-height: 400px;
+    display: flex;
+    flex-direction: column;
+}
+
+.ad-header {
+    background: #f5f5f5;
+    color: #999;
+    padding: 8px;
+    text-align: center;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1px;
+}
+
+.ad-content {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 30px;
+    background: linear-gradient(135deg, #fef7f8 0%, #fdeef1 100%);
+}
+
+.ad-text {
+    text-align: center;
+}
+
+.ad-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.ad-subtitle {
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+/* ============================================================================= 
+   RESPONSIVE
+============================================================================= */
+
+@media (max-width: 768px) {
+    .user-profile-container,
+    .chat-history-container,
+    .sidebar-ad-long {
+        margin-bottom: 15px;
+    }
+}

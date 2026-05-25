@@ -1,0 +1,109 @@
+# Django
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.git
+.mypy_cache
+.pytest_cache
+.hypothesis
+
+# Local Django settings
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Media files
+media/
+
+# Static files (collected)
+staticfiles/
+static/collected/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Node modules (for docs)
+docs/node_modules/
+docs/build/
+docs/dist/
+
+# Python virtual environment
+mai_env/
+*/mai_env/
+
+# Model files
+fine_tuned_model/
+offload_cache/
+models/
+*.bin
+*.safetensors
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# API Documentation build files
+docs/postman/*.json
+docs/build/*.html
+docs/build/*.yaml
+
+# Local development
+.local/
+local/
+
+.cursor/
+.cursorignore
+
+
+character_data/
+
+.agent/
+
+mai_chat/test_chatbot_flow.py
+
+frontend/node_modules
+
+rag_documents/
+
+rag_results/
+
+.venv
+
+tests/

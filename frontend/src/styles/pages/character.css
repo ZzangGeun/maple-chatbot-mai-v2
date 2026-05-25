@@ -1,0 +1,509 @@
+/* =============================================================================
+   Character Page Styles
+   캐릭터 페이지 전용 스타일
+============================================================================= */
+
+/* ========== 메인 레이아웃 ========== */
+.character-main-layout {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 24px;
+    align-items: start;
+}
+
+@media (max-width: 1024px) {
+    .character-main-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ========== 좌측 프로필 섹션 ========== */
+.character-profile-section {
+    position: sticky;
+    top: 80px;
+}
+
+.profile-card {
+    background-color: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    padding: 20px;
+    text-align: center;
+}
+
+.profile-image-container {
+    width: 140px;
+    height: 140px;
+    margin: 0 auto 16px;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 3px solid #e89611;
+    background-color: #f8f8f8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.profile-image-container img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background-color: #f8f8f8;
+}
+
+.profile-image-placeholder {
+    font-size: 64px;
+}
+
+.profile-info {
+    text-align: center;
+}
+
+.profile-character-name {
+    font-size: 20px;
+    font-weight: 700;
+    color: #222;
+    margin: 12px 0 8px 0;
+}
+
+.profile-class-info {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.class-tag {
+    display: inline-block;
+    background-color: #f0f0f0;
+    color: #333;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.class-level {
+    display: inline-block;
+    background-color: #fff3cd;
+    color: #856404;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.profile-detail-row {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    font-size: 13px;
+    color: #666;
+    margin-bottom: 12px;
+}
+
+.detail-label {
+    font-weight: 600;
+    color: #e89611;
+}
+
+.detail-value {
+    color: #666;
+}
+
+.profile-power {
+    background: linear-gradient(135deg, #ffe89611 0%, #ffeaa745 100%);
+    border: 2px solid #e89611;
+    border-radius: 8px;
+    padding: 12px;
+    margin: 16px 0;
+}
+
+.power-label {
+    font-size: 12px;
+    color: #888;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.power-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: #e89611;
+}
+
+.profile-stats-summary {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.summary-stat {
+    background-color: #f5f5f5;
+    padding: 10px;
+    border-radius: 6px;
+    text-align: center;
+}
+
+.summary-label {
+    display: block;
+    font-size: 11px;
+    color: #999;
+    margin-bottom: 4px;
+    font-weight: 600;
+}
+
+.summary-value {
+    display: block;
+    font-size: 13px;
+    color: #333;
+    font-weight: 600;
+}
+
+/* ========== 우측 정보 섹션 ========== */
+.character-details-section {
+    background-color: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+}
+
+/* 탭 네비게이션 */
+.character-tabs {
+    display: flex;
+    border-bottom: 2px solid #f0f0f0;
+    background-color: #fafafa;
+}
+
+.char-tab-button {
+    flex: 1;
+    padding: 14px 16px;
+    border: none;
+    background: none;
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    color: #999;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.char-tab-button:hover {
+    color: #666;
+    background-color: #f5f5f5;
+}
+
+.char-tab-button.active {
+    color: #e89611;
+    background-color: #fff;
+}
+
+.char-tab-button.active::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background-color: #e89611;
+}
+
+/* 탭 컨텐츠 */
+.char-tab-content {
+    display: none;
+    padding: 24px;
+    animation: fadeIn 0.3s ease;
+}
+
+.char-tab-content.active {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ========== 정보 카드 ========== */
+.info-card {
+    background-color: transparent;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 0;
+    margin-bottom: 24px;
+}
+
+.info-card:last-child {
+    margin-bottom: 0;
+}
+
+.info-card-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #222;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #f0f0f0;
+}
+
+/* ========== 스탯 그리드 ========== */
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+}
+
+.stat-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #f5f5f5;
+    font-size: 14px;
+}
+
+.stat-item:last-child {
+    border-bottom: none;
+}
+
+.stat-label {
+    color: #666;
+    font-weight: 500;
+}
+
+.stat-value {
+    font-weight: 700;
+    color: #222;
+}
+
+/* ========== 장비 그리드 ========== */
+.equipment-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 12px;
+}
+
+.equipment-item {
+    background-color: #f8f8f8;
+    border: 2px solid #e8e8e8;
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.equipment-item:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border-color: #e89611;
+    background-color: #fff;
+}
+
+.equipment-icon {
+    width: 60px;
+    height: 60px;
+    margin: 0 auto 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: white;
+    border-radius: 6px;
+    padding: 4px;
+}
+
+.equipment-icon img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+.equipment-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: #333;
+    word-break: keep-all;
+    margin-bottom: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    min-height: 28px;
+}
+
+.equipment-part {
+    font-size: 11px;
+    color: #999;
+    margin-top: 4px;
+    font-weight: 500;
+}
+
+.equipment-starforce {
+    font-size: 12px;
+    color: #ffd700;
+    margin-top: 4px;
+    font-weight: 700;
+}
+
+.equipment-potential {
+    font-size: 10px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    margin-top: 4px;
+    display: inline-block;
+    font-weight: 600;
+}
+
+.equipment-item .equipment-potential {
+    background: #e8d5f2;
+    color: #9b59b6;
+    border: 1px solid #d4a5e0;
+}
+
+/* ========== Raw 데이터 ========== */
+.raw-data-pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    background: #f5f5f5;
+    padding: 16px;
+    border-radius: 8px;
+    font-size: 12px;
+    max-height: 500px;
+    overflow-y: auto;
+    border: 1px solid #e0e0e0;
+}
+
+/* ========== 레거시 스타일 (호환성) ========== */
+.character-info-container {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+}
+
+.character-profile-sidebar {
+    flex: 0 0 280px;
+    background-color: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    padding: 24px;
+    text-align: center;
+    position: sticky;
+    top: 20px;
+}
+
+.character-image-wrapper {
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    overflow: hidden;
+    margin: 0 auto 16px;
+    border: 4px solid #e89611;
+    background-color: #f5f5f5;
+}
+
+.character-image-wrapper img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.profile-name {
+    font-size: 24px;
+    font-weight: 600;
+    color: #222;
+    margin-bottom: 4px;
+}
+
+.profile-details {
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 16px;
+}
+
+.profile-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    text-align: left;
+}
+
+.profile-stat-item {
+    background-color: #f9f9f9;
+    padding: 8px 12px;
+    border-radius: 8px;
+}
+
+.profile-stat-label {
+    display: block;
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 2px;
+}
+
+.profile-stat-value {
+    font-size: 15px;
+    font-weight: 500;
+    color: #333;
+}
+
+.character-details-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.details-tabs {
+    display: flex;
+    border-bottom: 1px solid #e0e0e0;
+    margin-bottom: 24px;
+}
+
+.tab-button {
+    padding: 12px 20px;
+    cursor: pointer;
+    border: none;
+    background: none;
+    font-family: 'Pretendard', sans-serif;
+    font-size: 16px;
+    font-weight: 500;
+    color: #666;
+    position: relative;
+    transition: color 0.3s ease;
+}
+
+.tab-button::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background-color: #e89611;
+    transform: scaleX(0);
+    transition: transform 0.3s ease;
+}
+
+.tab-button.active {
+    color: #e89611;
+}
+
+.tab-button.active::after {
+    transform: scaleX(1);
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+    animation: fadeIn 0.5s ease;

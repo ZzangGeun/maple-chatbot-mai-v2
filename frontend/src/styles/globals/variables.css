@@ -1,0 +1,40 @@
+/* =============================================================================
+   CSS Variables - Theme Colors & Design Tokens
+   MapleStory Orange Theme 색상 및 디자인 변수
+============================================================================= */
+
+:root {
+    /* Colors - Primary Palette */
+    --primary-color: #ff9800;
+    --primary-dark: #f57c00;
+    --accent-color: #ffb74d;
+    --accent-dark: #ff8c00;
+    
+    /* Colors - Text */
+    --text-primary: #1a1a1a;
+    --text-secondary: #4a4a4a;
+    --text-muted: #888888;
+    
+    /* Colors - Borders & Backgrounds */
+    --border-light: #f0e6dc;
+    --border-gray: #d0d0d0;
+    --background-light: #fffaf5;
+    
+    /* Gradients */
+    --background-gradient: linear-gradient(135deg, #fffaf5 0%, #fff5eb 100%);
+    --header-gradient: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+    --nav-gradient: linear-gradient(135deg, #fff8f0 0%, #fff5eb 100%);
+    
+    /* Shadows */
+    --shadow-light: 0 2px 10px rgba(255, 152, 0, 0.15);
+    --shadow-medium: 0 4px 15px rgba(255, 152, 0, 0.1);
+    
+    /* Border Radius */
+    --border-radius-small: 8px;
+    --border-radius-medium: 12px;
+    --border-radius-large: 15px;
+    --border-radius-round: 50%;
+    
+    /* Transitions */
+    --transition-fast: 0.3s ease;
+}

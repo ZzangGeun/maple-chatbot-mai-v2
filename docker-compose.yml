@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  db:
+    image: ankane/pgvector:latest
+    container_name: mai_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "ccg2558!@#"
+      POSTGRES_DB: maple_chatbot_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    container_name: mai_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: always
+
+  django:
+    build:
+      context: .
+      dockerfile: Dockerfile.django
+    container_name: mai_django
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env.prod
+    volumes:
+      - .:/app
+      - /app/.venv  # 로컬 가상환경(.venv)이 컨테이너 내부를 덮어쓰지 않도록 익명 볼륨 처리
+    command: >
+      sh -c "python -c \"
+      import socket, time
+      s = socket.socket()
+      s.settimeout(1)
+      while True:
+          try:
+              s.connect(('db', 5432))
+              break
+          except Exception:
+              print('Waiting for database connection on db:5432...')
+              time.sleep(1)
+      \" && python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    depends_on:
+      - db
+      - redis
+    restart: always
+
+  fastapi:
+    build:
+      context: .
+      dockerfile: Dockerfile.fastapi
+    container_name: mai_fastapi
+    ports:
+      - "8001:8001"
+    env_file:
+      - .env.prod
+    volumes:
+      - .:/app
+      - /app/.venv  # 로컬 가상환경(.venv)이 컨테이너 내부를 덮어쓰지 않도록 익명 볼륨 처리
+    command: >
+      sh -c "python -c \"
+      import socket, time
+      s = socket.socket()
+      s.settimeout(1)
+      while True:
+          try:
+              s.connect(('db', 5432))
+              break
+          except Exception:
+              print('Waiting for database connection on db:5432...')
+              time.sleep(1)
+      \" && python -m ai_server.main"
+    depends_on:
+      - db
+      - redis
+    restart: always
+
+volumes:
+  pgdata:
+  redis_data:

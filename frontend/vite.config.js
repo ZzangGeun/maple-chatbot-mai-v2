@@ -1,0 +1,36 @@
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import path from 'path'
+
+// https://vitejs.dev/config/
+export default defineConfig(({ command }) => ({
+  plugins: [react()],
+  // 개발 서버에서는 '/', 빌드 시에는 '/static/dist/' 사용
+  base: command === 'serve' ? '/' : '/static/dist/',
+  server: {
+    // /api 경로만 Django 백엔드로 프록시합니다.
+    // /chat, /character 등 페이지 경로는 React Router가 처리하므로 프록시하지 않습니다.
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/admin': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+        secure: false,
+      },
+    }
+  },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
+  build: {
+    outDir: '../static/dist',
+    emptyOutDir: true,
+    manifest: true,
+  }
+}))
