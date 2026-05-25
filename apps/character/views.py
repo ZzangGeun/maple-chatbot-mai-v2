@@ -3,7 +3,7 @@
 캐릭터 정보 뷰 모듈 (표준 Django JsonResponse)
 
 넥슨 API에서 캐릭터 정보를 조회하여 반환합니다.
-실제 API 호출은 services.nexon 패키지에 위임합니다.
+실제 API 호출은 apps.character.nexon 패키지에 위임합니다.
 """
 
 import logging
@@ -12,7 +12,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from services.nexon import get_character_data
+from apps.character.nexon import get_character_data
 
 logger = logging.getLogger(__name__)
 

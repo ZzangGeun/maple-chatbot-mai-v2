@@ -12,7 +12,7 @@ from urllib.parse import urlencode
 
 import aiohttp
 
-from services.nexon.constants import (
+from apps.character.nexon.constants import (
     API_ENDPOINTS,
     BASE_URL,
     RATE_LIMIT_RETRY_DELAY_SECONDS,

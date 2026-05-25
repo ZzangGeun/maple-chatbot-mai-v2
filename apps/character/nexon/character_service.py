@@ -14,13 +14,13 @@ from pathlib import Path
 import aiohttp
 from django.core.cache import cache
 
-from services.nexon.client import (
+from apps.character.nexon.client import (
     fetch_account_character_list,
     fetch_all_character_info,
     fetch_character_ocid,
 )
-from services.nexon.constants import CACHE_DURATION, NEXON_API_KEY
-from services.nexon.extractors import all_info_extract
+from apps.character.nexon.constants import CACHE_DURATION, NEXON_API_KEY
+from apps.character.nexon.extractors import all_info_extract
 
 logger = logging.getLogger(__name__)
 
