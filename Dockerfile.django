@@ -28,7 +28,7 @@ COPY . .
 EXPOSE 8000
 
 # Django settings 모듈 지정 (기본값: 개발용 설정)
-ENV DJANGO_SETTINGS_MODULE=maple_chatbot.settings.development
+ENV DJANGO_SETTINGS_MODULE=config.settings.development
 
 # 서버 실행 (로컬 호스트 바인딩이 아닌 0.0.0.0 바인딩)
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
