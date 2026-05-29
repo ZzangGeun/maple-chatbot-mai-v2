@@ -158,6 +158,27 @@ const ChatPage = () => {
     setInput('');
     setIsLoading(true);
 
+    // 임시 세션 ID인 경우, 먼저 실제 세션을 생성
+    let activeSessionId = currentSessionId;
+    if (typeof activeSessionId === 'string' && activeSessionId.startsWith('temp-')) {
+      try {
+        const response = await chatApi.createSession();
+        const newSession = response.data.data;
+        activeSessionId = newSession.id;
+        setCurrentSessionId(activeSessionId);
+        setSessions(prev => [newSession, ...prev]);
+      } catch (error) {
+        console.error("세션 생성 실패:", error);
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: '세션 생성에 실패했습니다. 페이지를 새로고침해주세요.',
+          thinking: ''
+        }]);
+        setIsLoading(false);
+        return;
+      }
+    }
+
     // 2. AI 메시지 플레이스홀더 추가
     setMessages(prev => [...prev, { role: 'assistant', content: '', thinking: '' }]);
 
@@ -165,7 +186,7 @@ const ChatPage = () => {
 
     // 3. 스트리밍 요청
     await chatApi.streamMessage(
-      currentSessionId,
+      activeSessionId,
       userMessageText,
       (chunk) => {
         if (chunk.type === 'token') {

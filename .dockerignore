@@ -1,0 +1,10 @@
+.venv
+__pycache__
+.git
+.gitignore
+.vscode
+docs/obsidian
+data
+fine_tuned_model
+offload_cache
+env
