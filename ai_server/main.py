@@ -25,8 +25,36 @@ from ai_server.graph.builder.hybrid_builder import app_graph
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("AI_Server")
+from contextlib import asynccontextmanager
+from apscheduler.schedulers.background import BackgroundScheduler
+from ai_server.rag.character_batch import run_character_embedding_batch
 
-app = FastAPI(title="MapleStory AI Server (LangGraph)")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: 백그라운드 스케줄러를 가동합니다.
+    # 한국 시간대(Asia/Seoul)를 기준으로 새벽 4시에 작동하도록 설정합니다.
+    scheduler = BackgroundScheduler(timezone="Asia/Seoul")
+    scheduler.add_job(
+        run_character_embedding_batch,
+        trigger="cron",
+        hour=4,
+        minute=0,
+        id="character_embedding_job",
+        name="매일 새벽 4시 캐릭터 데이터 pgvector 임베딩 적재"
+    )
+    scheduler.start()
+    logger.info("⏰ 백그라운드 스케줄러가 성공적으로 시작되었습니다. (매일 04:00 실행)")
+    
+    yield
+    
+    # Shutdown: 서비스 종료 시 스케줄러를 안전하게 닫습니다.
+    scheduler.shutdown()
+    logger.info("⏰ 백그라운드 스케줄러가 안전하게 종료되었습니다.")
+
+app = FastAPI(
+    title="MapleStory AI Server (LangGraph)",
+    lifespan=lifespan
+)
 
 
 class QueryRequest(BaseModel):

@@ -78,7 +78,7 @@ def get_sessions(request) -> JsonResponse:
                 "message_count": session.messages.count(),
             }
         )
-    return JsonResponse(session_list, safe=False, status=200)
+    return JsonResponse({"status": "success", "data": session_list}, status=200)
 
 
 @csrf_exempt
@@ -96,10 +96,13 @@ def create_session(request) -> JsonResponse:
 
     return JsonResponse(
         {
-            "id": str(session.session_id),
-            "created_at": session.created_at.isoformat(),
-            "last_message": None,
-            "message_count": 0,
+            "status": "success",
+            "data": {
+                "id": str(session.session_id),
+                "created_at": session.created_at.isoformat(),
+                "last_message": None,
+                "message_count": 0,
+            },
         },
         status=201,
     )
@@ -136,7 +139,7 @@ def get_messages(request, session_id: str) -> JsonResponse:
                 }
             )
 
-    return JsonResponse(message_list, safe=False, status=200)
+    return JsonResponse({"status": "success", "data": message_list}, status=200)
 
 
 @csrf_exempt

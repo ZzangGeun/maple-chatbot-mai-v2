@@ -2,10 +2,10 @@
 """
 로컬 LLM(HuggingFace) 로더 모듈
 
-모듈 수준 싱글턴 패턴:
-  파이썬은 모듈을 최초 import 시 한 번만 실행하므로
-  `_loader` 인스턴스는 프로세스 생애 주기 동안 단 하나만 생성됩니다.
-  `__new__` 오버라이드 없이도 동일한 효과를 얻을 수 있습니다.
+Lazy Loading 싱글턴 패턴:
+  모듈 import 시에는 모델을 로드하지 않고,
+  `get_local_llm()` 최초 호출 시 한 번만 로드합니다.
+  이후 호출에서는 캐싱된 인스턴스를 재사용합니다.
 
 사용법:
   from ai_server.llm.llm_loader import get_local_llm
@@ -73,16 +73,26 @@ class LocalLLMLoader:
 
 
 # ---------------------------------------------------------------------------
-# 모듈 수준 싱글턴 — import 시 딱 한 번 인스턴스를 생성합니다.
+# 모듈 수준 싱글턴 — lazy loading 패턴
+# import 시점에는 인스턴스를 생성하지 않고, 최초 호출 시 생성합니다.
+# 이렇게 하면 이 모듈을 import만 하는 곳에서 불필요한 모델 로드를 방지합니다.
 # ---------------------------------------------------------------------------
-_loader = LocalLLMLoader()
+_loader: LocalLLMLoader | None = None
 
 
 def get_local_llm() -> HuggingFacePipeline:
     """
     로컬 LLM 인스턴스를 반환합니다.
 
+    최초 호출 시 LocalLLMLoader를 생성하여 모델을 VRAM에 로드하고,
+    이후 호출에서는 캐싱된 인스턴스를 재사용합니다.
+
     Returns:
         HuggingFacePipeline 인스턴스.
     """
+    global _loader
+
+    if _loader is None:
+        _loader = LocalLLMLoader()
+
     return _loader.get_llm()
