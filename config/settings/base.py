@@ -124,9 +124,10 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 NEXON_API_KEY = config("NEXON_API_KEY", default="")
 OPENAI_API_KEY = config("OPENAI_API_KEY", default="")
 
-# AI 서버 설정 (LangGraph FastAPI 서버)
-# .env에서 AI_SERVER_URL=http://your-server:8001 으로 오버라이드 가능
+# AI 서버 및 Redis 설정
+# .env에서 오버라이드 가능
 AI_SERVER_BASE_URL = config("AI_SERVER_URL", default="http://127.0.0.1:8001")
+REDIS_URL = config("REDIS_URL", default="redis://127.0.0.1:6379/0")
 
 # ─────────────────────────────────────────────
 # 광고 설정

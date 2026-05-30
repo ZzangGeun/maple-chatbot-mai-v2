@@ -36,6 +36,20 @@ def _get_session_or_raise(session_id: str) -> ChatSession:
     return session
 
 
+async def _aget_session_or_raise(session_id: str) -> ChatSession:
+    """세션을 안전하게 비동기로 조회하고 없을 경우 커스텀 예외를 발생시킵니다."""
+    try:
+        session_uuid = uuid.UUID(session_id)
+    except ValueError:
+        raise InvalidSessionId()
+
+    session = await ChatSession.objects.filter(session_id=session_uuid).afirst()
+    if not session:
+        raise SessionNotFound(session_id)
+    
+    return session
+
+
 # ---------------------------------------------------------------------------
 # 세션 관련 엔드포인트
 # ---------------------------------------------------------------------------
@@ -169,13 +183,13 @@ def send_message(request, session_id: str) -> JsonResponse:
 
 @csrf_exempt
 @require_http_methods(["POST"])
-def stream_message(request, session_id: str) -> StreamingHttpResponse:
+async def stream_message(request, session_id: str) -> StreamingHttpResponse:
     """
     세션에 메시지를 전송하고 AI 서버로부터 스트리밍 응답 수신 (SSE).
 
     POST /api/chat/sessions/<session_id>/stream/
     """
-    session = _get_session_or_raise(session_id)
+    session = await _aget_session_or_raise(session_id)
 
     try:
         body = json.loads(request.body)
@@ -183,7 +197,7 @@ def stream_message(request, session_id: str) -> StreamingHttpResponse:
     except (json.JSONDecodeError, ValueError):
         return JsonResponse({"error": "유효하지 않은 요청 형식입니다."}, status=400)
 
-    # 제너레이터로 응답 스트리밍 (백그라운드에서 DB 저장됨)
+    # 제너레이터로 응답 스트리밍 (백그라운드에서 비동기로 DB 저장됨)
     stream_generator = stream_message_generator(session, content)
     
     return StreamingHttpResponse(stream_generator, content_type="text/event-stream")

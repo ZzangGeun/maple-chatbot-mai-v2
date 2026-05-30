@@ -10,6 +10,7 @@ import logging
 import time
 import uuid
 
+import aiohttp
 import requests
 from django.conf import settings
 
@@ -82,9 +83,9 @@ def send_message_sync(session: ChatSession, content: str) -> tuple[ChatMessage, 
     return saved_msg, result_dict
 
 
-def stream_message_generator(session: ChatSession, content: str):
+async def stream_message_generator(session: ChatSession, content: str):
     """
-    AI 서버로부터 SSE 스트리밍 응답을 받고 완료 후 DB에 저장합니다.
+    AI 서버로부터 SSE 스트리밍 응답을 비동기로 받고 완료 후 DB에 저장합니다.
 
     Args:
         session: 현재 활성화된 채팅 세션
@@ -94,7 +95,7 @@ def stream_message_generator(session: ChatSession, content: str):
         SSE 스트림 문자열
     """
     # 사용자 메시지 먼저 DB에 임시 저장 (답변은 나중에 채움)
-    msg_obj = ChatMessage.objects.create(
+    msg_obj = await ChatMessage.objects.acreate(
         session_id=session,
         user_message=content,
         ai_response="",
@@ -104,27 +105,33 @@ def stream_message_generator(session: ChatSession, content: str):
     payload = {"session_id": str(session.session_id), "message": content}
 
     try:
-        with requests.post(AI_SERVER_STREAM_URL, json=payload, stream=True, timeout=60) as r:
-            if r.status_code != 200:
-                error_msg = {"type": "error", "content": f"AI Server Error: {r.status_code}"}
-                yield f"data: {json.dumps(error_msg)}\n\n"
-                return
+        # aiohttp를 활용해 비동기로 스트리밍 응답을 받음
+        async with aiohttp.ClientSession() as client:
+            async with client.post(AI_SERVER_STREAM_URL, json=payload, timeout=60) as r:
+                if r.status != 200:
+                    error_msg = {"type": "error", "content": f"AI Server Error: {r.status}"}
+                    yield f"data: {json.dumps(error_msg)}\n\n"
+                    return
 
-            for line in r.iter_lines():
-                if line:
-                    decoded_line = line.decode("utf-8")
-                    yield decoded_line + "\n\n"
+                async for line in r.content:
+                    if line:
+                        decoded_line = line.decode("utf-8").strip()
+                        if not decoded_line:
+                            continue
+                        
+                        # 원본 형식 유지하면서 클라이언트에 전달
+                        yield decoded_line + "\n\n"
 
-                    if decoded_line.startswith("data: "):
-                        try:
-                            json_str = decoded_line[6:]
-                            if json_str.strip() == "[DONE]":
-                                continue
-                            chunk_data = json.loads(json_str)
-                            if chunk_data.get("type") == "token":
-                                ai_accumulated_text.append(chunk_data.get("content", ""))
-                        except Exception:
-                            pass
+                        if decoded_line.startswith("data: "):
+                            try:
+                                json_str = decoded_line[6:]
+                                if json_str.strip() == "[DONE]":
+                                    continue
+                                chunk_data = json.loads(json_str)
+                                if chunk_data.get("type") == "token":
+                                    ai_accumulated_text.append(chunk_data.get("content", ""))
+                            except Exception:
+                                pass
 
     except Exception as e:
         yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
@@ -133,6 +140,6 @@ def stream_message_generator(session: ChatSession, content: str):
     final_text = "".join(ai_accumulated_text)
     try:
         msg_obj.ai_response = final_text
-        msg_obj.save()
+        await msg_obj.asave()
     except Exception as e:
         logger.error(f"스트리밍 DB 업데이트 실패: {e}")
