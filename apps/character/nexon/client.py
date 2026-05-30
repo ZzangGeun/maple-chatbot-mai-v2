@@ -2,8 +2,8 @@
 """
 넥슨 Open API HTTP 클라이언트
 
-aiohttp를 사용한 순수 API 호출 로직만 담당합니다.
-비즈니스 로직(캐싱, 파일 저장 등)은 character_service.py에 위임합니다.
+aiohttp를 사용한 API 호출을 수행하며, 429(Rate Limit) 및 5xx 계열 서버 장애 시
+지수 백오프(Exponential Backoff)를 지원하는 견고한 재시도 메커니즘을 내장합니다.
 """
 
 import asyncio
@@ -49,6 +49,66 @@ def _build_headers(api_key: str) -> dict:
     }
 
 
+async def _request_with_retry(
+    session: aiohttp.ClientSession,
+    url: str,
+    headers: dict,
+    max_retries: int = 3,
+    initial_delay: float = 1.0,
+) -> aiohttp.ClientResponse | None:
+    """
+    HTTP GET 요청을 지수 백오프 재시도와 함께 실행합니다.
+
+    429(Rate Limit) 및 5xx 계열 서버 일시 에러 발생 시 최대 max_retries 만큼
+    대기 시간을 늘려가며 재시도합니다.
+
+    Args:
+        session: aiohttp 클라이언트 세션.
+        url: 요청할 대상 URL.
+        headers: 요청 헤더.
+        max_retries: 최대 재시도 횟수.
+        initial_delay: 최초 재시도 대기 시간(초).
+
+    Returns:
+        aiohttp.ClientResponse 인스턴스 또는 실패 시 None.
+    """
+    delay = initial_delay
+    for attempt in range(1, max_retries + 1):
+        try:
+            # 넥슨 Open API의 지연 및 먹통 상황에 대처하기 위해 타임아웃을 설정합니다.
+            timeout = aiohttp.ClientTimeout(total=10)
+            response = await session.get(url, headers=headers, timeout=timeout)
+            
+            # 성공 시 즉시 응답을 반환합니다.
+            if response.status == 200:
+                return response
+                
+            # 429(Rate Limit) 혹은 5xx(서버 일시 장애)인 경우 백오프 적용
+            if response.status == 429 or 500 <= response.status < 600:
+                logger.warning(
+                    f"HTTP {response.status} 발생. {attempt}/{max_retries}차 재시도 대기중... (대기 시간: {delay}초)"
+                )
+                await asyncio.sleep(delay)
+                delay *= 2  # 다음 대기 시간은 2배로 증가시킵니다.
+                continue
+                
+            # 그 외의 에러(400, 403, 404 등)는 재시도가 무의미하므로 바로 루프를 탈출합니다.
+            logger.error(f"HTTP {response.status} 에러 발생으로 인해 즉시 요청을 중단합니다. URL: {url}")
+            return response
+            
+        except asyncio.TimeoutError:
+            logger.warning(f"타임아웃 초과. {attempt}/{max_retries}차 재시도 대기중... (대기 시간: {delay}초)")
+            await asyncio.sleep(delay)
+            delay *= 2
+        except aiohttp.ClientError as e:
+            logger.warning(f"네트워크 오류 ({e}). {attempt}/{max_retries}차 재시도 대기중... (대기 시간: {delay}초)")
+            await asyncio.sleep(delay)
+            delay *= 2
+            
+    logger.error(f"최대 {max_retries}회 재시도를 초과하여 요청이 실패했습니다. URL: {url}")
+    return None
+
+
 async def fetch_character_ocid(
     session: aiohttp.ClientSession,
     character_name: str,
@@ -66,14 +126,11 @@ async def fetch_character_ocid(
         OCID 문자열 또는 조회 실패 시 None.
     """
     url = _build_url("get_character_id", character_name=character_name)
-
-    async with session.get(url, headers=headers) as response:
-        if response.status != 200:
-            logger.error(f"OCID 조회 실패 (HTTP {response.status}): {character_name}")
-            return None
-
+    response = await _request_with_retry(session, url, headers)
+    if response and response.status == 200:
         data = await response.json()
-        return data.get("ocid") or None
+        return data.get("ocid")
+    return None
 
 
 async def _fetch_single_endpoint(
@@ -84,7 +141,7 @@ async def _fetch_single_endpoint(
 ) -> dict:
     """
     단일 엔드포인트에서 캐릭터 정보를 조회합니다.
-    429(Rate Limit) 발생 시 1회 재시도합니다.
+    재시도 로직을 통해 Rate Limit 상황을 유연하게 대처합니다.
 
     Args:
         session: 재사용할 aiohttp 클라이언트 세션.
@@ -96,21 +153,10 @@ async def _fetch_single_endpoint(
         API 응답 딕셔너리. 실패 시 빈 딕셔너리.
     """
     url = _build_url(endpoint_key, ocid=ocid)
-
-    async with session.get(url, headers=headers) as response:
-        if response.status == 200:
-            return await response.json()
-
-        if response.status == 429:
-            # Rate Limit: 잠시 대기 후 1회 재시도합니다.
-            logger.warning(f"Rate Limit 발생, {RATE_LIMIT_RETRY_DELAY_SECONDS}초 후 재시도: {endpoint_key}")
-            await asyncio.sleep(RATE_LIMIT_RETRY_DELAY_SECONDS)
-            async with session.get(url, headers=headers) as retry:
-                if retry.status == 200:
-                    return await retry.json()
-
-        logger.warning(f"엔드포인트 조회 실패 (HTTP {response.status}): {endpoint_key}")
-        return {}
+    response = await _request_with_retry(session, url, headers)
+    if response and response.status == 200:
+        return await response.json()
+    return {}
 
 
 async def fetch_all_character_info(
@@ -161,17 +207,15 @@ async def fetch_account_character_list(api_key: str) -> list[dict]:
 
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers) as response:
-                if response.status != 200:
-                    logger.error(f"캐릭터 목록 조회 실패: HTTP {response.status}")
-                    return []
-
+            response = await _request_with_retry(session, url, headers)
+            if response and response.status == 200:
                 data = await response.json()
                 all_characters: list[dict] = []
                 for account in data.get("account_list", []):
                     all_characters.extend(account.get("character_list", []))
                 return all_characters
+            return []
 
-    except aiohttp.ClientError as e:
-        logger.error(f"캐릭터 목록 조회 중 네트워크 오류: {e}")
+    except Exception as e:
+        logger.error(f"캐릭터 목록 조회 중 예상치 못한 오류: {e}")
         return []

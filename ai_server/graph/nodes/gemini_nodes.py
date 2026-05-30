@@ -18,13 +18,11 @@ import logging
 from langchain_core.messages import AIMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.runnables import RunnableConfig
 
 from ai_server.graph.state import GraphState
 from ai_server.llm.gemini_loader import get_gemini_llm
-from ai_server.prompts.gemini import (
-    GEMINI_CHAT_SYSTEM,
-    GEMINI_RAG_SYSTEM,
-)
+from ai_server.prompts.templates import PromptTemplate
 
 logger = logging.getLogger("GeminiNodes")
 
@@ -33,7 +31,7 @@ logger = logging.getLogger("GeminiNodes")
 # 최종 답변 생성 노드들
 # ---------------------------------------------------------------------------
 
-def gemini_generate_rag_node(state: GraphState) -> dict:
+def gemini_generate_rag_node(state: GraphState, config: RunnableConfig = None) -> dict:
     """
     로컬 에이전트가 검색한 컨텍스트를 바탕으로 Gemini가 최종 RAG 답변을 생성합니다.
 
@@ -42,6 +40,7 @@ def gemini_generate_rag_node(state: GraphState) -> dict:
 
     Args:
         state: 현재 그래프 상태 (state["context"], state["messages"] 사용).
+        config: Langfuse 등 상위 콜백 추적 전파를 위한 랭체인 런타임 설정.
 
     Returns:
         {"messages": [AIMessage(content=...)]}
@@ -52,19 +51,26 @@ def gemini_generate_rag_node(state: GraphState) -> dict:
 
     logger.info(f"[GeminiRAG] 쿼리: '{rewritten_query}' | 컨텍스트 길이: {len(context)}자")
 
+    # Enum으로 관리되는 프롬프트를 직접 참조합니다.
+    rag_prompt_text = PromptTemplate.GEMINI_RAG_SYSTEM.value
+
     prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", GEMINI_RAG_SYSTEM),
+            ("system", rag_prompt_text),
             MessagesPlaceholder(variable_name="messages"),
         ]
     )
 
     chain = prompt | llm | StrOutputParser()
-    response = chain.invoke({"context": context, "messages": state["messages"]})
+    # config를 invoke 시 명시적으로 제공하여 Langfuse의 Tracing 콜백이 끊어지지 않도록 보장합니다.
+    response = chain.invoke(
+        {"context": context, "messages": state["messages"]},
+        config=config
+    )
     return {"messages": [AIMessage(content=response)]}
 
 
-def gemini_generate_chat_node(state: GraphState) -> dict:
+def gemini_generate_chat_node(state: GraphState, config: RunnableConfig = None) -> dict:
     """
     검색 없이 Gemini가 일반 대화 답변을 생성합니다.
 
@@ -73,6 +79,7 @@ def gemini_generate_chat_node(state: GraphState) -> dict:
 
     Args:
         state: 현재 그래프 상태 (state["messages"] 사용).
+        config: Langfuse 등 상위 콜백 추적 전파를 위한 랭체인 런타임 설정.
 
     Returns:
         {"messages": [AIMessage(content=...)]}
@@ -80,13 +87,17 @@ def gemini_generate_chat_node(state: GraphState) -> dict:
     llm = get_gemini_llm()
     logger.info("[GeminiChat] 일반 대화 답변 생성 시작")
 
+    # Enum으로 관리되는 프롬프트를 직접 참조합니다.
+    chat_prompt_text = PromptTemplate.GEMINI_CHAT_SYSTEM.value
+
     prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", GEMINI_CHAT_SYSTEM),
+            ("system", chat_prompt_text),
             MessagesPlaceholder(variable_name="messages"),
         ]
     )
 
     chain = prompt | llm | StrOutputParser()
-    response = chain.invoke({"messages": state["messages"]})
+    # config를 invoke 시 명시적으로 제공하여 Langfuse의 Tracing 콜백이 끊어지지 않도록 보장합니다.
+    response = chain.invoke({"messages": state["messages"]}, config=config)
     return {"messages": [AIMessage(content=response)]}

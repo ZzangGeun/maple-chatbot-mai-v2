@@ -31,7 +31,18 @@ from ai_server.rag.character_batch import run_character_embedding_batch
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: 백그라운드 스케줄러를 가동합니다.
+    # Startup: 1. 로컬 LLM 사전 로딩 (Eager Loading)
+    # 첫 질문 시 VRAM 적재 지연으로 인한 타임아웃 방지를 위해 서버 기동 시 즉시 로드합니다.
+    logger.info("🤖 로컬 LLM 모델 사전 적재를 시작합니다...")
+    try:
+        from ai_server.llm.llm_loader import get_local_llm
+        # 최초 1회 싱글톤 로더를 호출해 VRAM에 얹습니다.
+        get_local_llm()
+        logger.info("🤖 로컬 LLM 모델 적재 성공!")
+    except Exception as e:
+        logger.error(f"🤖 로컬 LLM 모델 적재 중 실패 발생: {e}")
+
+    # Startup: 2. 백그라운드 스케줄러를 가동합니다.
     # 한국 시간대(Asia/Seoul)를 기준으로 새벽 4시에 작동하도록 설정합니다.
     scheduler = BackgroundScheduler(timezone="Asia/Seoul")
     scheduler.add_job(

@@ -21,18 +21,11 @@
 import logging
 
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.runnables import RunnableConfig
 
 from ai_server.graph.state import GraphState
 from ai_server.llm.llm_loader import get_local_llm
-from ai_server.prompts.local import (
-    LOCAL_INTENT_EXTRACT_HUMAN,
-    LOCAL_INTENT_EXTRACT_SYSTEM,
-    LOCAL_ROUTE_HUMAN,
-    LOCAL_ROUTE_SYSTEM,
-    LOCAL_REWRITE_HUMAN,
-    LOCAL_REWRITE_SYSTEM,
-)
+from ai_server.prompts.templates import PromptTemplate
 from ai_server.rag.retriever import Retriever
 
 logger = logging.getLogger("LocalNodes")
@@ -45,7 +38,7 @@ _retriever_instance = Retriever()
 # Conditional Edge 노드 — 라우터
 # ---------------------------------------------------------------------------
 
-def local_route_node(state: GraphState) -> str:
+def local_route_node(state: GraphState, config: RunnableConfig = None) -> str:
     """
     로컬 LLM으로 질문을 3가지 경로 중 하나로 분류합니다.
 
@@ -56,20 +49,27 @@ def local_route_node(state: GraphState) -> str:
 
     Args:
         state: 현재 그래프 상태.
+        config: Langfuse 등 상위 콜백 추적 전파를 위한 랭체인 런타임 설정.
 
     Returns:
         세 경로 중 하나의 문자열.
     """
+    from langchain_core.prompts import ChatPromptTemplate
+
     llm = get_local_llm()
     question = state["messages"][-1].content
 
+    route_system = PromptTemplate.LOCAL_ROUTE_SYSTEM.value
+    route_human = PromptTemplate.LOCAL_ROUTE_HUMAN.value
+
     prompt = ChatPromptTemplate.from_messages(
-        [("system", LOCAL_ROUTE_SYSTEM), ("human", LOCAL_ROUTE_HUMAN)]
+        [("system", route_system), ("human", route_human)]
     )
 
     chain = prompt | llm | StrOutputParser()
     # 로컬 모델은 간혹 불필요한 앞뒤 텍스트를 붙이므로 lower()로 정규화합니다.
-    decision = chain.invoke({"question": question}).strip().lower()
+    # config를 함께 전달하여 추적이 유실되지 않도록 연동합니다.
+    decision = chain.invoke({"question": question}, config=config).strip().lower()
 
     logger.info(f"[LocalRoute] 분류 결과: '{decision}' | 질문: {question[:50]}...")
 
@@ -86,7 +86,7 @@ def local_route_node(state: GraphState) -> str:
 # 일반 노드들 — 전처리 파이프라인
 # ---------------------------------------------------------------------------
 
-def local_rewrite_node(state: GraphState) -> dict:
+def local_rewrite_node(state: GraphState, config: RunnableConfig = None) -> dict:
     """
     로컬 LLM으로 검색 쿼리를 재작성합니다.
 
@@ -95,23 +95,29 @@ def local_rewrite_node(state: GraphState) -> dict:
 
     Args:
         state: 현재 그래프 상태.
+        config: Langfuse 등 상위 콜백 추적 전파를 위한 랭체인 런타임 설정.
 
     Returns:
         {"query": 재작성된 쿼리 문자열}
     """
+    from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+
     llm = get_local_llm()
     messages = state["messages"]
 
+    rewrite_system = PromptTemplate.LOCAL_REWRITE_SYSTEM.value
+    rewrite_human = PromptTemplate.LOCAL_REWRITE_HUMAN.value
+
     prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", LOCAL_REWRITE_SYSTEM),
+            ("system", rewrite_system),
             MessagesPlaceholder(variable_name="messages"),
-            ("human", LOCAL_REWRITE_HUMAN),
+            ("human", rewrite_human),
         ]
     )
 
     chain = prompt | llm | StrOutputParser()
-    new_query = chain.invoke({"messages": messages}).strip()
+    new_query = chain.invoke({"messages": messages}, config=config).strip()
 
     logger.info(f"[LocalRewrite] 재작성된 쿼리: {new_query}")
     return {"query": new_query}
@@ -146,16 +152,21 @@ def local_retrieve_node(state: GraphState) -> dict:
             or metadata.get("url", "")
         )
 
-        context_part = f"""## [문서 {i}] {title}
-- **카테고리**: {category}
-- **출처**: {source}
-{f"- **참고 링크**: {url}" if url else ""}
+        # f-string 대신 문자열 결합을 사용합니다.
+        # doc.page_content에 중괄호({})가 포함될 수 있어 f-string은 format spec 에러를 유발합니다.
+        url_line = f"- **참고 링크**: {url}" if url else ""
 
-**내용**:
-{doc.page_content}
-
----
-"""
+        context_part = "\n".join([
+            f"## [문서 {i}] {title}",
+            f"- **카테고리**: {category}",
+            f"- **출처**: {source}",
+            url_line,
+            "",
+            "**내용**:",
+            doc.page_content,
+            "",
+            "---",
+        ])
         context_parts.append(context_part)
 
     context_text = "\n".join(context_parts)
@@ -173,7 +184,7 @@ def local_retrieve_node(state: GraphState) -> dict:
 import json as _json  # 함수 내 사용을 위해 별칭 사용 (모듈 상단 import와 충돌 방지)
 
 
-def local_intent_extract_node(state: GraphState) -> dict:
+def local_intent_extract_node(state: GraphState, config: RunnableConfig = None) -> dict:
     """
     로컬 LLM으로 질문에서 메이플스토리 도메인 엔티티를 구조화하여 추출합니다.
 
@@ -188,25 +199,39 @@ def local_intent_extract_node(state: GraphState) -> dict:
 
     Args:
         state: 현재 그래프 상태.
+        config: Langfuse 등 상위 콜백 추적 전파를 위한 랭체인 런타임 설정.
 
     Returns:
         {"extracted_entities": {"character_name": ..., "world": ..., "item_name": ...}}
     """
+    from langchain_core.prompts import ChatPromptTemplate
+
     llm = get_local_llm()
     question = state["messages"][-1].content
 
+    intent_extract_system = PromptTemplate.LOCAL_INTENT_EXTRACT_SYSTEM.value
+    intent_extract_human = PromptTemplate.LOCAL_INTENT_EXTRACT_HUMAN.value
+
+    # Qwen 로컬 모델은 assistant 턴의 JSON prefix를 그대로 완성해야 하므로 
+    # 프롬프트 유도 구문을 적용하되, 누락된 여는 브레이스 부분을 채워줍니다.
     prompt = ChatPromptTemplate.from_messages(
-        [("system", LOCAL_INTENT_EXTRACT_SYSTEM), ("human", LOCAL_INTENT_EXTRACT_HUMAN)]
+        [
+            ("system", intent_extract_system), 
+            ("human", intent_extract_human)
+        ]
     )
 
     chain = prompt | llm | StrOutputParser()
-    raw_output = chain.invoke({"question": question}).strip()
+    raw_output = chain.invoke({"question": question}, config=config).strip()
 
-    logger.info(f"[LocalIntentExtract] 원본 출력: {raw_output}")
+    # assistant 턴이 '{"character_name": "'로 유도되었기 때문에,
+    # 출력된 텍스트 앞에 이 접두사를 결합해야 완전한 JSON이 됩니다.
+    full_json_str = '{"character_name": "' + raw_output
+    logger.info(f"[LocalIntentExtract] 결합된 원본 JSON 출력: {full_json_str}")
 
     # 로컬 LLM 출력이 JSON이 아닐 수 있으므로 안전하게 파싱합니다.
     try:
-        entities = _json.loads(raw_output)
+        entities = _json.loads(full_json_str)
     except (_json.JSONDecodeError, ValueError):
         logger.warning("[LocalIntentExtract] JSON 파싱 실패. 질문 전체를 character_name으로 사용합니다.")
         # 파싱 실패 시 질문 자체를 캐릭터명으로 추정합니다.
