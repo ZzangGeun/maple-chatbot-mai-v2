@@ -109,3 +109,5 @@ rag_results/
 tests/
 
 .antigravitycli
+
+prompts/templates/

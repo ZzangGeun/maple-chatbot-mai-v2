@@ -2,6 +2,11 @@
 """
 프롬프트 패키지
 
-- gemini.py : Gemini 전용 프롬프트 (Clean format, 태그 없음)
-- local.py  : 로컬 LLM(Qwen) 전용 프롬프트 (ChatML format)
+- templates.py : PromptTemplate Enum — 모든 프롬프트를 중앙 관리
+- loader.py    : get_prompt() — Enum 또는 문자열 키로 프롬프트 조회
 """
+
+from ai_server.prompts.templates import PromptTemplate
+from ai_server.prompts.loader import get_prompt
+
+__all__ = ["PromptTemplate", "get_prompt"]
