@@ -13,6 +13,11 @@ import glob
 from pathlib import Path
 from typing import List, Dict, Any
 
+import redis
+
+# Redis 연결 설정
+REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 
@@ -186,6 +191,61 @@ class DocumentLoader:
                 logger.error(f"JSON 파일 로드 중 오류: {file_path}")
 
         return all_splits
+
+    def load_from_redis(self, key_pattern: str = "rag_docs:*") -> List[Document]:
+        """
+        Redis에 저장된 JSON 데이터를 읽어 문서 청크로 변환합니다.
+        
+        Args:
+            key_pattern: 조회할 Redis 키 패턴 (기본값: 'rag_docs:*')
+            
+        Returns:
+            분할된 Document 객체 리스트
+        """
+        try:
+            r = redis.from_url(REDIS_URL, decode_responses=True)
+            keys = r.keys(key_pattern)
+            all_splits = []
+            
+            for key in keys:
+                data_str = r.get(key)
+                if not data_str:
+                    continue
+                    
+                data = json.loads(data_str)
+                # Redis에서 가져온 데이터가 리스트일 경우 각각 처리
+                if isinstance(data, list):
+                    for idx, item in enumerate(data):
+                        md_content = self._json_to_markdown(item)
+                        
+                        metadata = {
+                            "source": f"redis://{key}#{idx}",
+                            "category": key.split(":")[-1] if ":" in key else key,
+                            "format": "markdown"
+                        }
+                        # item 내부에 미리 생성된 metadata가 있다면 병합
+                        if isinstance(item, dict) and "metadata" in item and isinstance(item["metadata"], dict):
+                            metadata.update(item["metadata"])
+                            
+                        doc = Document(page_content=md_content, metadata=metadata)
+                        splits = self.text_splitter.split_documents([doc])
+                        all_splits.extend(splits)
+                else:
+                    md_content = self._json_to_markdown(data)
+                    metadata = {
+                        "source": f"redis://{key}",
+                        "category": key.split(":")[-1] if ":" in key else key,
+                        "format": "markdown"
+                    }
+                    doc = Document(page_content=md_content, metadata=metadata)
+                    splits = self.text_splitter.split_documents([doc])
+                    all_splits.extend(splits)
+                    
+            return all_splits
+        except Exception as e:
+            logger.error(f"Redis에서 RAG 문서를 로드하는 중 오류 발생: {e}")
+            return []
+
 
 
 # --- 테스트 코드 ---

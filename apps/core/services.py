@@ -6,32 +6,29 @@ from datetime import datetime, timedelta
 from common.utils.api_client import get_api_data
 from bs4 import BeautifulSoup
 import time
+import redis
 
 logger = logging.getLogger(__name__)
-CACHE_DURATION = timedelta(hours=1)  # 캐시 유효 기간 설정 (1시간)
 
-NOTICE_JSON_PATH = os.path.join(settings.BASE_DIR, 'rag_documents', 'notices', 'notice_data_rag.json')
-RANKING_JSON_PATH = os.path.join(settings.BASE_DIR, 'rag_documents', 'rankings', 'ranking_data_rag.json')
+# Redis 연결 설정
+REDIS_URL = getattr(settings, 'REDIS_URL', 'redis://127.0.0.1:6379/0')
+redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+
+CACHE_DURATION = 3600  # 캐시 유효 기간 설정 (초 단위: 1시간)
 
 def get_notice_list() -> dict:
     """
-    공지사항 데이터를 Nexon API에서 가져와서 JSON 파일로 저장하고 반환합니다.
-    JSON 파일이 있고 최신이면(1시간 이내) API 호출 없이 파일 내용을 반환합니다.
+    공지사항 데이터를 Nexon API에서 가져와서 Redis에 캐시하고 반환합니다.
+    캐시가 있고 최신이면(1시간 이내) API 호출 없이 캐시 데이터를 반환합니다.
 
     Returns:
         dict: 카테고리별 공지사항 데이터. 키: notice_general, notice_event 등
     """
     # 캐시 확인
-    if os.path.exists(NOTICE_JSON_PATH):
-        try:
-            modified_time = datetime.fromtimestamp(os.path.getmtime(NOTICE_JSON_PATH))
-            if datetime.now() - modified_time < CACHE_DURATION:
-                data = load_notice_data_from_json()
-                if data:
-                    logger.info("캐시된 공지사항 데이터를 사용합니다.")
-                    return data
-        except Exception as e:
-            logger.warning(f"캐시 확인 중 오류: {e}")
+    cached_data = load_notice_data_from_redis()
+    if cached_data:
+        logger.info("Redis에 캐시된 공지사항 데이터를 사용합니다.")
+        return cached_data
 
     # API 호출
     notice_general = get_api_data("/notice")
@@ -46,94 +43,87 @@ def get_notice_list() -> dict:
         "notice_update": notice_update
     }
     
-    # JSON 파일로 저장
-    save_notice_data_to_json(notice_data)
+    # Redis에 캐시 저장
+    save_notice_data_to_redis(notice_data)
 
     return notice_data
 
 
-def save_notice_data_to_json(notice_data: dict) -> None:
+def save_notice_data_to_redis(notice_data: dict) -> None:
     """
-    공지사항 데이터를 JSON 파일로 저장합니다.
+    공지사항 데이터를 Redis에 캐시로 저장합니다.
 
     Args:
         notice_data: 저장할 공지사항 데이터
     """
     try:
-        # character_data 디렉토리가 없으면 생성
-        os.makedirs(os.path.dirname(NOTICE_JSON_PATH), exist_ok=True)
-        
-        # JSON 파일로 저장 (한글 지원)
-        with open(NOTICE_JSON_PATH, 'w', encoding='utf-8') as f:
-            json.dump(notice_data, f, ensure_ascii=False, indent=2)
-        
-        logger.info(f"공지사항 데이터가 {NOTICE_JSON_PATH}에 저장되었습니다.")
+        redis_client.setex('cache:notice_list', CACHE_DURATION, json.dumps(notice_data, ensure_ascii=False))
+        logger.info("공지사항 데이터가 Redis에 캐시되었습니다.")
     except Exception as e:
-        logger.error(f"공지사항 데이터 저장 중 오류 발생: {e}")
+        logger.error(f"Redis 공지사항 데이터 저장 중 오류 발생: {e}")
 
 
-def load_notice_data_from_json() -> dict:
+def load_notice_data_from_redis() -> dict:
     """
-    JSON 파일에서 공지사항 데이터를 로드합니다.
+    Redis에서 공지사항 캐시 데이터를 로드합니다.
 
     Returns:
-        dict: 로드된 공지사항 데이터. 파일이 없거나 오류 시 빈 딕셔너리 반환
+        dict: 로드된 공지사항 데이터. 없거나 오류 시 빈 딕셔너리 반환
     """
     try:
-        if os.path.exists(NOTICE_JSON_PATH):
-            with open(NOTICE_JSON_PATH, 'r', encoding='utf-8') as f:
-                return json.load(f)
+        data = redis_client.get('cache:notice_list')
+        if data:
+            return json.loads(data)
     except Exception as e:
-        logger.error(f"공지사항 데이터 로드 중 오류 발생: {e}")
+        logger.error(f"Redis 공지사항 데이터 로드 중 오류 발생: {e}")
     
     return {}
 
 
-def save_ranking_data_to_json(ranking_data: dict) -> None:
+def save_ranking_data_to_redis(ranking_data: dict) -> None:
     """
-    랭킹 데이터를 JSON 파일로 저장합니다.
+    랭킹 데이터를 Redis에 캐시로 저장합니다.
 
     Args:
         ranking_data: 저장할 랭킹 데이터
     """
     try:
-        # character_data 디렉토리가 없으면 생성
-        os.makedirs(os.path.dirname(RANKING_JSON_PATH), exist_ok=True)
-        
-        # JSON 파일로 저장 (한글 지원)
-        with open(RANKING_JSON_PATH, 'w', encoding='utf-8') as f:
-            json.dump(ranking_data, f, ensure_ascii=False, indent=2)
-        
-        logger.info(f"랭킹 데이터가 {RANKING_JSON_PATH}에 저장되었습니다.")
+        redis_client.setex('cache:ranking_list', CACHE_DURATION, json.dumps(ranking_data, ensure_ascii=False))
+        logger.info("랭킹 데이터가 Redis에 캐시되었습니다.")
     except Exception as e:
-        logger.error(f"랭킹 데이터 저장 중 오류 발생: {e}")
+        logger.error(f"Redis 랭킹 데이터 저장 중 오류 발생: {e}")
 
 
-def load_ranking_data_from_json() -> dict:
+def load_ranking_data_from_redis() -> dict:
     """
-    JSON 파일에서 랭킹 데이터를 로드합니다.
+    Redis에서 랭킹 캐시 데이터를 로드합니다.
 
     Returns:
-        dict: 로드된 랭킹 데이터. 파일이 없거나 오류 시 빈 딕셔너리 반환
+        dict: 로드된 랭킹 데이터. 없거나 오류 시 빈 딕셔너리 반환
     """
     try:
-        if os.path.exists(RANKING_JSON_PATH):
-            with open(RANKING_JSON_PATH, 'r', encoding='utf-8') as f:
-                return json.load(f)
+        data = redis_client.get('cache:ranking_list')
+        if data:
+            return json.loads(data)
     except Exception as e:
-        logger.error(f"랭킹 데이터 로드 중 오류 발생: {e}")
+        logger.error(f"Redis 랭킹 데이터 로드 중 오류 발생: {e}")
     
     return {}
 
 
 def get_ranking_list() -> dict:
     """
-    랭킹 데이터를 Nexon API에서 가져와서 JSON 파일로 저장하고 반환합니다.
+    랭킹 데이터를 Nexon API에서 가져와서 Redis에 캐시하고 반환합니다.
     상위 50위까지만 저장합니다.
 
     Returns:
         dict: overall_ranking 키를 포함한 랭킹 데이터
     """
+    cached_data = load_ranking_data_from_redis()
+    if cached_data:
+        logger.info("Redis에 캐시된 랭킹 데이터를 사용합니다.")
+        return cached_data
+
     overall_ranking = get_api_data("/ranking/overall")
     
     # JSON 구조: overall_ranking -> ranking 배열
@@ -150,8 +140,8 @@ def get_ranking_list() -> dict:
         "overall_ranking": ranking_list
     }
     
-    # JSON 파일로 저장
-    save_ranking_data_to_json(ranking_data)
+    # Redis에 캐시 저장
+    save_ranking_data_to_redis(ranking_data)
     
     return ranking_data
 
@@ -254,20 +244,13 @@ def sync_notices_to_rag() -> bool:
             }
             rag_docs.append(doc)
 
-    # JSON 저장
+    # Redis에 RAG 문서 JSON 저장
     try:
-        abs_path = os.path.abspath(NOTICE_JSON_PATH)
-        logger.info(f"파일 저장 시도: {abs_path}")
-
-        os.makedirs(os.path.dirname(abs_path), exist_ok=True)
-        with open(abs_path, 'w', encoding='utf-8') as f:
-            json.dump(rag_docs, f, ensure_ascii=False, indent=2)
-
-        logger.info(f"RAG용 공지사항 데이터가 {abs_path}에 저장되었습니다. (총 {len(rag_docs)}건)")
+        redis_client.set('rag_docs:notices', json.dumps(rag_docs, ensure_ascii=False))
+        logger.info(f"RAG용 공지사항 데이터가 Redis (rag_docs:notices)에 저장되었습니다. (총 {len(rag_docs)}건)")
         return True
-    except OSError as e:
-        # IOError/FileNotFoundError 등 파일 시스템 오류를 구체적으로 잡음
-        logger.error(f"RAG용 공지사항 저장 중 오류 발생: {e}")
+    except Exception as e:
+        logger.error(f"Redis RAG용 공지사항 저장 중 오류 발생: {e}")
         return False
 
 
