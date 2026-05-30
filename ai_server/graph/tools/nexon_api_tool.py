@@ -22,13 +22,11 @@ TODO:
 """
 
 import logging
-import os
 from typing import Any
 
 import aiohttp
-from dotenv import load_dotenv
 
-load_dotenv()
+from ai_server.config import settings
 
 logger = logging.getLogger("NexonAPIClient")
 
@@ -45,7 +43,7 @@ class NexonAPIClient:
     """
 
     def __init__(self) -> None:
-        self._api_key: str = os.getenv("NEXON_API_KEY", "")
+        self._api_key: str = settings.api.nexon_api_key
         if not self._api_key:
             logger.warning("NEXON_API_KEY가 설정되지 않았습니다. API 호출이 실패합니다.")
 

@@ -11,9 +11,9 @@ import json
 import logging
 import re
 
-import os
 from typing import Any
 
+from ai_server.config import settings
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
@@ -25,42 +25,7 @@ from ai_server.graph.builder.hybrid_builder import app_graph
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("AI_Server")
-from contextlib import asynccontextmanager
-from apscheduler.schedulers.background import BackgroundScheduler
-from ai_server.rag.character_batch import run_character_embedding_batch
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup: 1. 로컬 LLM 사전 로딩 (Eager Loading)
-    # 첫 질문 시 VRAM 적재 지연으로 인한 타임아웃 방지를 위해 서버 기동 시 즉시 로드합니다.
-    logger.info("🤖 로컬 LLM 모델 사전 적재를 시작합니다...")
-    try:
-        from ai_server.llm.llm_loader import get_local_llm
-        # 최초 1회 싱글톤 로더를 호출해 VRAM에 얹습니다.
-        get_local_llm()
-        logger.info("🤖 로컬 LLM 모델 적재 성공!")
-    except Exception as e:
-        logger.error(f"🤖 로컬 LLM 모델 적재 중 실패 발생: {e}")
-
-    # Startup: 2. 백그라운드 스케줄러를 가동합니다.
-    # 한국 시간대(Asia/Seoul)를 기준으로 새벽 4시에 작동하도록 설정합니다.
-    scheduler = BackgroundScheduler(timezone="Asia/Seoul")
-    scheduler.add_job(
-        run_character_embedding_batch,
-        trigger="cron",
-        hour=4,
-        minute=0,
-        id="character_embedding_job",
-        name="매일 새벽 4시 캐릭터 데이터 pgvector 임베딩 적재"
-    )
-    scheduler.start()
-    logger.info("⏰ 백그라운드 스케줄러가 성공적으로 시작되었습니다. (매일 04:00 실행)")
-    
-    yield
-    
-    # Shutdown: 서비스 종료 시 스케줄러를 안전하게 닫습니다.
-    scheduler.shutdown()
-    logger.info("⏰ 백그라운드 스케줄러가 안전하게 종료되었습니다.")
+from ai_server.lifespan import lifespan
 
 app = FastAPI(
     title="MapleStory AI Server (LangGraph)",
@@ -75,16 +40,15 @@ class QueryRequest(BaseModel):
     message: str
 
 
-def get_langfuse_handler(session_id: str | None = None, user_id: str | None = None) -> Any | None:
+def get_langfuse_handler() -> Any | None:
     """
     환경 변수가 설정되어 있을 경우 Langfuse CallbackHandler를 반환합니다.
     (설정이 없으면 None 반환)
     """
     try:
         if os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
-            from langfuse.callback import CallbackHandler
-            # 넘겨받은 session_id를 세션 추적 키로 연결합니다.
-            langfuse_handler = CallbackHandler(session_id=session_id, user_id=user_id)
+            from langfuse.langchain import CallbackHandler
+            langfuse_handler = CallbackHandler()
             return langfuse_handler
     except ImportError:
         logger.warning("langfuse 패키지가 설치되지 않았습니다. 추적을 비활성화합니다.")
@@ -128,11 +92,16 @@ async def generate_response(request: QueryRequest) -> dict:
     try:
         logger.info(f"요청 수신 (Session: {request.session_id}): {request.message}")
 
-        config = {"configurable": {"thread_id": request.session_id}}
+        config = {
+            "configurable": {"thread_id": request.session_id},
+            "metadata": {
+                "langfuse_session_id": request.session_id
+            }
+        }
         
         # Langfuse 설정
         callbacks = []
-        langfuse_handler = get_langfuse_handler(session_id=request.session_id)
+        langfuse_handler = get_langfuse_handler()
         if langfuse_handler:
             callbacks.append(langfuse_handler)
             
@@ -170,11 +139,16 @@ async def stream_response(request: QueryRequest) -> StreamingResponse:
     try:
         logger.info(f"스트리밍 요청 수신 (Session: {request.session_id}): {request.message}")
 
-        config = {"configurable": {"thread_id": request.session_id}}
+        config = {
+            "configurable": {"thread_id": request.session_id},
+            "metadata": {
+                "langfuse_session_id": request.session_id
+            }
+        }
         
         # Langfuse 설정
         callbacks = []
-        langfuse_handler = get_langfuse_handler(session_id=request.session_id)
+        langfuse_handler = get_langfuse_handler()
         if langfuse_handler:
             callbacks.append(langfuse_handler)
             

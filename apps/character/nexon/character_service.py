@@ -37,7 +37,7 @@ def _build_headers(api_key: str) -> dict:
 def save_character_data_to_json(
     character_name: str,
     character_data: dict,
-    save_dir: str = "character_data",
+    save_dir: str = "data/character_data",
 ) -> str | None:
     """
     캐릭터 데이터를 JSON 파일로 저장합니다.
@@ -45,14 +45,14 @@ def save_character_data_to_json(
     Args:
         character_name: 파일명에 사용할 캐릭터 이름.
         character_data: 저장할 데이터 딕셔너리.
-        save_dir: 저장 디렉터리 경로 (기본값: "character_data").
+        save_dir: 저장 디렉터리 경로 (기본값: "data/character_data").
 
     Returns:
         저장된 파일 경로 문자열, 실패 시 None.
     """
     try:
         save_path = Path(save_dir)
-        save_path.mkdir(exist_ok=True)
+        save_path.mkdir(parents=True, exist_ok=True)
 
         # 파일시스템에 안전한 문자만 허용합니다.
         safe_name = "".join(

@@ -6,21 +6,18 @@ pgvector를 사용하여 문서 임베딩을 저장하고 유사도 검색을 �
 """
 
 import logging
-import os
 
-import dotenv
 from langchain_postgres import PGVector
 
 # 절대경로 import: 상대경로의 try/except 분기를 제거하고 단일 경로로 통일합니다.
 from ai_server.rag.embeddings import QwenEmbeddings
 from ai_server.rag.document_loader import DocumentLoader
-
-dotenv.load_dotenv()
+from ai_server.config import settings
 
 logger = logging.getLogger(__name__)
 
-DB_CONNECTION = os.getenv("DB_CONNECTION")
-COLLECTION_NAME = os.getenv("COLLECTION_NAME")
+DB_CONNECTION = settings.db.connection
+COLLECTION_NAME = settings.db.collection_name
 
 
 def get_vectorstore() -> PGVector:
