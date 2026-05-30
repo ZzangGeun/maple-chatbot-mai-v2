@@ -13,7 +13,6 @@ class MaiChatSessionTest(TestCase):
             username="testuser",
             password="testpassword123"
         )
-        self.chat_url = reverse("chat:chat")  # 실제 urls.py의 구성에 따라 변경 필요 (가정)
 
     def test_chat_page_creates_session_for_anonymous(self):
         """비로그인 유저의 경우 익명 세션을 생성하는지 확인 (현재 뷰 로직에 따라 다를 수 있음)"""

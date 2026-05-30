@@ -19,8 +19,8 @@ from django.views.decorators.http import require_http_methods
 from apps.core.services import (
     get_notice_list,
     get_ranking_list,
-    load_notice_data_from_json,
-    load_ranking_data_from_json,
+    load_notice_data_from_redis,
+    load_ranking_data_from_redis,
 )
 
 logger = logging.getLogger(__name__)
@@ -111,11 +111,11 @@ def home_data(request) -> JsonResponse:
 @require_http_methods(["GET"])
 def get_notices_json(request) -> JsonResponse:
     """
-    캐시된 JSON 파일에서 공지사항 전체 데이터를 로드합니다.
+    캐시된 Redis에서 공지사항 전체 데이터를 로드합니다.
 
     GET /api/core/notices/json/
     """
-    data = load_notice_data_from_json()
+    data = load_notice_data_from_redis()
     return JsonResponse({"status": "success", "data": data}, status=200)
 
 
@@ -163,11 +163,11 @@ def get_cashshop_notices(request) -> JsonResponse:
 @require_http_methods(["GET"])
 def get_ranking_json(request) -> JsonResponse:
     """
-    캐시된 JSON 파일에서 랭킹 전체 데이터를 로드합니다.
+    캐시된 Redis에서 랭킹 전체 데이터를 로드합니다.
 
     GET /api/core/ranking/json/
     """
-    data = load_ranking_data_from_json()
+    data = load_ranking_data_from_redis()
     return JsonResponse({"status": "success", "data": data}, status=200)
 
 
