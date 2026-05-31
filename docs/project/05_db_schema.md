@@ -21,7 +21,7 @@ Django에서 기본적으로 제공하는 사용자 테이블.
 - `username`: 계정 아이디
 - `password`: 해시화된 비밀번호
 
-### 2.2 UserProfile (`apps.accounts.models.UserProfile`)
+### 2.2 UserProfile (`apps.auth.models.UserProfile`)
 메이플스토리 연동에 필요한 추가 정보를 담는 확장 테이블.
 - `id`: Primary Key
 - `user_id`: FK (`auth.User`), 1:1 관계

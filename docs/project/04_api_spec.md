@@ -14,14 +14,14 @@
 
 ---
 
-## 1. 계정 및 인증 (Accounts)
+## 1. 계정 및 인증 (auth)
 
-### `POST /api/v1/accounts/signup/`
+### `POST /api/v1/auth/signup/`
 - **역할**: 새로운 사용자 가입 및 메이플스토리 닉네임 연동.
 - **Request Body**: `username`, `password`, `maple_nickname`, `nexon_api_key` (옵션)
 - **Response**: 가입된 유저 프로필 정보.
 
-### `POST /api/v1/accounts/login/`
+### `POST /api/v1/auth/login/`
 - **역할**: 사용자 로그인 및 세션 생성.
 - **Response**: 로그인 성공 메시지 및 세션 쿠키 발급.
 

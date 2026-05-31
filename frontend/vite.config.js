@@ -8,6 +8,8 @@ export default defineConfig(({ command }) => ({
   // 개발 서버에서는 '/', 빌드 시에는 '/static/dist/' 사용
   base: command === 'serve' ? '/' : '/static/dist/',
   server: {
+    // ngrok 터널 등 외부 호스트 접속 허용
+    allowedHosts: true,
     // /api 경로만 Django 백엔드로 프록시합니다.
     // /chat, /character 등 페이지 경로는 React Router가 처리하므로 프록시하지 않습니다.
     proxy: {
