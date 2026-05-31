@@ -24,7 +24,7 @@ from typing import Any, Awaitable, Union
 
 from fastapi import FastAPI
 from langgraph.checkpoint.redis.aio import AsyncRedisSaver
-from ai_server.graph.builder.hybrid_builder import build_hybrid_graph
+from ai_server.graph.builder.main_builder import build_main_graph
 
 logger = logging.getLogger("AI_Server_Lifespan")
 
@@ -133,7 +133,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             logger.info("LangGraph Redis Checkpointer (AsyncRedisSaver) 설정 완료.")
 
             # 컴파일된 그래프를 FastAPI app.state에 바인딩
-            app.state.graph = build_hybrid_graph(checkpointer=checkpointer)
+            app.state.graph = build_main_graph(checkpointer=checkpointer)
             logger.info("하이브리드 에이전트 그래프 빌드 및 앱 상태 바인딩 완료.")
 
             await _startup()
