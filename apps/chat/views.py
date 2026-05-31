@@ -55,12 +55,16 @@ async def _aget_session_or_raise(session_id: str) -> ChatSession:
 # ---------------------------------------------------------------------------
 
 
-@require_http_methods(["GET"])
+# ---------------------------------------------------------------------------
+# 세션 관련 엔드포인트 (설계서 chat-api.md 기준 리팩토링)
+# ---------------------------------------------------------------------------
+
+
 def get_sessions(request) -> JsonResponse:
     """
     채팅 세션 목록 조회.
 
-    GET /api/v1/chat/sessions/
+    GET /api/v1/chat/rooms
     """
     if request.user.is_authenticated:
         sessions = ChatSession.objects.filter(user=request.user)
@@ -72,8 +76,6 @@ def get_sessions(request) -> JsonResponse:
 
     for session in sessions:
         first_message = session.messages.order_by("created_at").first()
-        last_message = session.messages.order_by("-created_at").first()
-
         if first_message and first_message.user_message:
             title = (
                 first_message.user_message[:20] + "..."
@@ -86,101 +88,164 @@ def get_sessions(request) -> JsonResponse:
         session_list.append(
             {
                 "id": str(session.session_id),
-                "created_at": session.created_at.isoformat(),
-                "title": title,
-                "last_message": last_message.user_message if last_message else "대화 없음",
-                "message_count": session.messages.count(),
+                "room_name": title,  # 설계서 스펙
+                "updated_at": session.created_at.isoformat(),  # 설계서 스펙
             }
         )
-    return JsonResponse({"status": "success", "data": session_list}, status=200)
+    return JsonResponse({"success": True, "rooms": session_list}, status=200)
 
 
-@csrf_exempt
-@require_http_methods(["POST"])
 def create_session(request) -> JsonResponse:
     """
     새로운 채팅 세션 생성.
 
-    POST /api/v1/chat/sessions/create/
+    POST /api/v1/chat/rooms
     """
     user_profile = request.user if request.user.is_authenticated else None
+
+    # 요청 바디에서 room_name 추출
+    try:
+        body = json.loads(request.body)
+        room_name = body.get("room_name", "새로운 대화").strip()
+    except Exception:
+        room_name = "새로운 대화"
 
     session = ChatSession.objects.create(user=user_profile)
     logger.info(f"새로운 세션 생성: {session.session_id}")
 
     return JsonResponse(
         {
-            "status": "success",
-            "data": {
+            "success": True,
+            "room": {
                 "id": str(session.session_id),
+                "room_name": room_name,
                 "created_at": session.created_at.isoformat(),
-                "last_message": None,
-                "message_count": 0,
             },
         },
         status=201,
     )
 
 
-@require_http_methods(["GET"])
 def get_messages(request, session_id: str) -> JsonResponse:
     """
     특정 세션의 메시지 목록 조회.
 
-    GET /api/v1/chat/sessions/<session_id>/messages/
+    GET /api/v1/chat/rooms/{room_id}/messages
     """
     session = _get_session_or_raise(session_id)
     messages = session.messages.all().order_by("created_at")
 
     message_list = []
     for msg in messages:
+        # DB의 ChatMessage 한 행(user_message와 ai_response 한 쌍)을
+        # 설계서의 개별 메시지 스트림으로 평탄화(Flatten)하여 변환합니다.
         if msg.user_message:
             message_list.append(
                 {
-                    "role": "user",
-                    "content": msg.user_message,
-                    "created_at": msg.created_at.isoformat(),
-                    "thinking": "",
+                    "id": msg.id * 2,
+                    "sender_type": "user",
+                    "message_content": msg.user_message,
+                    "sent_at": msg.created_at.isoformat(),
                 }
             )
         if msg.ai_response:
             message_list.append(
                 {
-                    "role": "assistant",
-                    "content": msg.ai_response,
-                    "created_at": msg.created_at.isoformat(),
-                    "thinking": getattr(msg, "thinking", "") or "",
+                    "id": msg.id * 2 + 1,
+                    "sender_type": "assistant",
+                    "message_content": msg.ai_response,
+                    "sent_at": msg.created_at.isoformat(),
                 }
             )
 
-    return JsonResponse({"status": "success", "data": message_list}, status=200)
+    return JsonResponse({"success": True, "messages": message_list}, status=200)
 
 
-@csrf_exempt
-@require_http_methods(["POST"])
 def send_message(request, session_id: str) -> JsonResponse:
     """
     세션에 메시지를 전송하고 AI 답변 수신 (동기).
 
-    POST /api/v1/chat/sessions/<session_id>/send/
+    POST /api/v1/chat/rooms/{room_id}/messages
     """
     session = _get_session_or_raise(session_id)
 
     try:
         body = json.loads(request.body)
-        content = body.get("content", "").strip()
+        content = body.get("message_content", "").strip() or body.get("content", "").strip()
     except (json.JSONDecodeError, ValueError):
-        return JsonResponse({"error": "유효하지 않은 요청 형식입니다."}, status=400)
+        return JsonResponse({"success": False, "error_code": "INVALID_FORMAT", "message": "유효하지 않은 요청 형식입니다."}, status=400)
 
     if not content:
-        return JsonResponse({"error": "Content is required"}, status=400)
+        return JsonResponse({"success": False, "error_code": "CONTENT_REQUIRED", "message": "메시지 본문(message_content)이 유비되어야 합니다."}, status=400)
 
-    # 비즈니스 로직 호출 (DB 저장 및 통신)
-    _, result_dict = send_message_sync(session, content)
+    # 비즈니스 로직 호출
+    saved_msg, _ = send_message_sync(session, content)
 
-    return JsonResponse(result_dict, status=200)
+    return JsonResponse(
+        {
+            "success": True,
+            "user_message": {
+                "id": saved_msg.id * 2,
+                "sender_type": "user",
+                "message_content": content,
+                "sent_at": saved_msg.created_at.isoformat(),
+            },
+            "assistant_message": {
+                "id": saved_msg.id * 2 + 1,
+                "sender_type": "assistant",
+                "message_content": saved_msg.ai_response,
+                "sent_at": saved_msg.created_at.isoformat(),
+            },
+        },
+        status=200,
+    )
 
 
+def delete_session(request, session_id: str) -> JsonResponse:
+    """
+    특정 채팅 세션 삭제.
+
+    DELETE /api/v1/chat/rooms/{room_id}
+    """
+    session = _get_session_or_raise(session_id)
+    session.delete()
+    return JsonResponse({"success": True, "message": "대화방이 삭제되었습니다."}, status=200)
+
+
+# ---------------------------------------------------------------------------
+# HTTP Method Dispatchers (설계서 API 규격 맵핑 목적)
+# ---------------------------------------------------------------------------
+
+
+@csrf_exempt
+def rooms_dispatch(request) -> JsonResponse:
+    """/api/v1/chat/rooms 경로의 GET/POST 분기 처리"""
+    if request.method == "GET":
+        return get_sessions(request)
+    elif request.method == "POST":
+        return create_session(request)
+    return JsonResponse({"detail": "Method not allowed"}, status=405)
+
+
+@csrf_exempt
+def messages_dispatch(request, session_id: str) -> JsonResponse:
+    """/api/v1/chat/rooms/{session_id}/messages 경로의 GET/POST 분기 처리"""
+    if request.method == "GET":
+        return get_messages(request, session_id)
+    elif request.method == "POST":
+        return send_message(request, session_id)
+    return JsonResponse({"detail": "Method not allowed"}, status=405)
+
+
+@csrf_exempt
+def room_detail_dispatch(request, session_id: str) -> JsonResponse:
+    """/api/v1/chat/rooms/{session_id} 경로의 DELETE 분기 처리"""
+    if request.method == "DELETE":
+        return delete_session(request, session_id)
+    return JsonResponse({"detail": "Method not allowed"}, status=405)
+
+
+# (참고) SSE 스트리밍 엔드포인트
 @csrf_exempt
 @require_http_methods(["POST"])
 def stream_message(request, session_id: str) -> StreamingHttpResponse:
@@ -193,24 +258,9 @@ def stream_message(request, session_id: str) -> StreamingHttpResponse:
 
     try:
         body = json.loads(request.body)
-        content = body.get("content", "").strip()
+        content = body.get("message_content", "").strip() or body.get("content", "").strip()
     except (json.JSONDecodeError, ValueError):
         return JsonResponse({"error": "유효하지 않은 요청 형식입니다."}, status=400)
 
-    # 제너레이터로 응답 스트리밍 (백그라운드에서 DB 저장됨)
     stream_generator = stream_message_generator(session, content)
-    
-    return StreamingHttpResponse(stream_generator, content_type="text/event-stream")
-
-
-@csrf_exempt
-@require_http_methods(["DELETE"])
-def delete_session(request, session_id: str) -> JsonResponse:
-    """
-    특정 채팅 세션 삭제.
-
-    DELETE /api/v1/chat/sessions/<session_id>/delete/
-    """
-    session = _get_session_or_raise(session_id)
-    session.delete()
-    return JsonResponse({"status": "deleted", "session_id": session_id}, status=200)
+    return StreamingHttpResponse(stream_generator, content_type="text/event-stream")

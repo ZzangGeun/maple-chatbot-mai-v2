@@ -23,9 +23,10 @@ urlpatterns = [
 
     # API 엔드포인트 (앱별 urls.py로 위임)
     # 향후 API 버전 관리(v2 등) 및 체계적인 경로 관리를 위해 기본 prefix를 /api/v1/으로 지정합니다.
-    path("api/v1/accounts/", include("apps.accounts.urls")),
+    path("api/v1/auth/", include("apps.accounts.urls")),
     path("api/v1/chat/", include("apps.chat.urls")),
     path("api/v1/character/", include("apps.character.urls")),
+
     path("api/v1/core/", include("apps.core.urls")),
 
     # React SPA Catch-all (클라이언트 사이드 라우팅 지원)

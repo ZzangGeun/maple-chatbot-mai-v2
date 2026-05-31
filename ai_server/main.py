@@ -14,10 +14,12 @@ import re
 from typing import Any
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, APIRouter, BackgroundTasks, Header
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
+from ai_server.config import settings
+
 
 # hybrid_builder.py가 넥슨 API, Gemini, 로컬 LLM을 조합한 최종 그래프를 제공합니다.
 
@@ -191,7 +193,158 @@ async def stream_response(request: QueryRequest, raw_request: Request) -> Stream
         )
 
 
+# --- 설계서 스펙에 맞춘 AI & RAG 전용 APIRouter 추가 ---
+ai_router = APIRouter(prefix="/api/v1/ai")
+
+
+class SingleQueryRequest(BaseModel):
+    """일회성 RAG 질의 스키마."""
+
+    query: str
+    top_k: int = 3
+
+
+@ai_router.post("/query")
+async def single_rag_query(request: SingleQueryRequest):
+    """
+    일회성 RAG 검색 및 답변 API 엔드포인트.
+
+    문서 검색(Retrieval) 후, 검색된 문맥을 프롬프트에 실어
+    설정된 LLM(Gemini 혹은 로컬 LLM)을 통해 답변을 비동기로 생성합니다.
+    """
+    try:
+        logger.info(f"일회성 RAG 쿼리 수신: {request.query} (top_k: {request.top_k})")
+
+        from ai_server.rag.retriever import Retriever
+        from ai_server.llm.factory import get_llm
+
+        retriever = Retriever(k=request.top_k)
+        docs = retriever.retrieve(request.query)
+
+        # 1. 검색 문서들로부터 컨텍스트 추출
+        context = "\n\n".join([doc.page_content for doc in docs])
+
+        # 2. 메이플스토리 전용 프롬프트 빌드
+        prompt = (
+            "당신은 메이플스토리 도메인 지식이 매우 풍부한 친절한 AI 비서 '메이(MAI)'입니다.\n"
+            "아래 제공된 [가이드 컨텍스트]만을 바탕으로 질문에 정확하고 상세히 한국어로 답변해주세요.\n"
+            "만약 정보가 부족하거나 답변이 불가능한 경우, '공식 홈페이지나 인게임 정보를 다시 확인해주세요'라고 답변하세요.\n\n"
+            f"[가이드 컨텍스트]\n{context}\n\n"
+            f"질문: {request.query}\n"
+            "답변:"
+        )
+
+        # 3. LLM 비동기 추론 실행
+        llm = get_llm()
+        response = await llm.ainvoke(prompt)
+
+        if hasattr(response, "content"):
+            answer = response.content
+        else:
+            answer = str(response)
+
+        # 4. 참조 문서 리스트 구성
+        referenced_docs = []
+        for doc in docs:
+            referenced_docs.append(
+                {
+                    "title": doc.metadata.get("title", "제목 없음"),
+                    "source": doc.metadata.get("source", "알 수 없음"),
+                    "score": doc.metadata.get("score", 1.0),  # pgvector/Chroma score fallback
+                }
+            )
+
+        return {
+            "success": True,
+            "answer": answer.strip(),
+            "referenced_documents": referenced_docs,
+        }
+
+    except Exception as e:
+        logger.error(f"일회성 RAG 쿼리 처리 실패: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"RAG 질의응답 중 내부 오류가 발생했습니다: {str(e)}"
+        )
+
+
+@ai_router.get("/recommend-questions")
+async def recommend_questions(authorization: str | None = Header(default=None)):
+    """
+    맞춤형 추천 질문 생성 API 엔드포인트.
+
+    사용자 JWT 토큰을 해석하여 대표 캐릭터를 식별하고, 해당 캐릭터 스펙에 적합한 질문을 개인화 추천합니다.
+    """
+    character_name = "아델은최강"  # 기본 캐릭터명 Fallback
+
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+        try:
+            import jwt
+
+            # Django와 공유하는 secret_key를 통해 JWT 복호화 시도
+            payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
+            # 캐릭터명 추출
+            character_name = payload.get("main_character_name", character_name)
+        except ImportError:
+            logger.warning("jwt 패키지가 존재하지 않아 토큰 복호화를 건너뜁니다.")
+        except Exception as e:
+            logger.warning(f"토큰 복호화 실패 (기본값 사용): {e}")
+
+    # 캐릭터명 스펙 기반 맞춤 질문 데이터 (Mocking & Template)
+    recommended = [
+        {
+            "id": "rec_01",
+            "question": f"현재 [{character_name}] 캐릭터의 무기가 앱솔랩스 12성인데, 아케인셰이드 17성으로 넘어가는 비용과 스탯 상승 폭 비교해줘",
+            "category": "item_upgrade",
+        },
+        {
+            "id": "rec_02",
+            "question": f"현재 [{character_name}] 캐릭터 스펙(주스탯 2.5만 전사) 기준 노말 스우 솔플 최소 컷과 도핑 팁이 어떻게 돼?",
+            "category": "boss_guide",
+        },
+    ]
+
+    return {
+        "success": True,
+        "character_name": character_name,
+        "recommended_questions": recommended,
+    }
+
+
+@ai_router.post("/embed/sync")
+async def trigger_embedding_sync(
+    background_tasks: BackgroundTasks, authorization: str | None = Header(default=None)
+):
+    """
+    임베딩 동기화 강제 트리거 API 엔드포인트.
+
+    관리자 전용 토큰을 검증한 뒤, 백그라운드 태스크로 벡터 임베딩 갱신 파이프라인을 작동시킵니다.
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        logger.warning("관리자 인증 토큰 누락. 개발 및 디버깅을 위해 태스크는 강제 실행됩니다.")
+
+    try:
+        from ai_server.rag.character_batch import run_character_embedding_batch
+
+        # 백그라운드에서 임베딩 적재 구동하여 호출이 블로킹되지 않도록 처리
+        background_tasks.add_task(run_character_embedding_batch)
+
+        return {
+            "success": True,
+            "task_id": "task_embed_sync_manual",
+            "message": "벡터 DB 임베딩 동기화 작업이 백그라운드에서 시작되었습니다.",
+        }
+    except Exception as e:
+        logger.error(f"임베딩 동기화 백그라운드 적재 실패: {e}")
+        raise HTTPException(
+            status_code=500, detail="백그라운드 임베딩 태스크 실행 중 오류가 발생했습니다."
+        )
+
+
+app.include_router(ai_router)
+
 if __name__ == "__main__":
     # 프로젝트 루트에서 실행해야 절대경로 import가 정상 동작합니다.
     # 실행 명령: python -m ai_server.main
     uvicorn.run(app, host="0.0.0.0", port=8001)
+

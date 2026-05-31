@@ -18,10 +18,20 @@ from . import views
 app_name = "chat"
 
 urlpatterns = [
-    path("sessions/", views.get_sessions, name="get_sessions"),
-    path("sessions/create/", views.create_session, name="create_session"),
-    path("sessions/<str:session_id>/messages/", views.get_messages, name="get_messages"),
-    path("sessions/<str:session_id>/send/", views.send_message, name="send_message"),
-    path("sessions/<str:session_id>/stream/", views.stream_message, name="stream_message"),
-    path("sessions/<str:session_id>/delete/", views.delete_session, name="delete_session"),
+    # 설계서 chat-api.md 규격에 맞춘 rooms 매핑 (GET: 목록 조회, POST: 생성)
+    path("rooms", views.rooms_dispatch, name="rooms_dispatch"),
+    path("rooms/", views.rooms_dispatch, name="rooms_dispatch_slash"),
+    
+    # 특정 대화방 상세 (DELETE: 삭제)
+    path("rooms/<str:session_id>", views.room_detail_dispatch, name="room_detail_dispatch"),
+    path("rooms/<str:session_id>/", views.room_detail_dispatch, name="room_detail_dispatch_slash"),
+    
+    # 특정 대화방 메시지 (GET: 조회, POST: 전송)
+    path("rooms/<str:session_id>/messages", views.messages_dispatch, name="messages_dispatch"),
+    path("rooms/<str:session_id>/messages/", views.messages_dispatch, name="messages_dispatch_slash"),
+    
+    # 스트리밍 SSE 엔드포인트 유지
+    path("rooms/<str:session_id>/stream", views.stream_message, name="stream_message"),
+    path("rooms/<str:session_id>/stream/", views.stream_message, name="stream_message_slash"),
 ]
+
