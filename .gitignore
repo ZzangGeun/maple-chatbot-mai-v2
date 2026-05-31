@@ -107,3 +107,7 @@ rag_results/
 .venv
 
 tests/
+
+.antigravitycli
+
+prompts/templates/

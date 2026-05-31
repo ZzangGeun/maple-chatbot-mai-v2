@@ -5,10 +5,10 @@
 각 앱의 urls.py가 API 엔드포인트를 직접 관리합니다.
 
 API 경로 구조:
-    /api/accounts/  ← apps.accounts.urls
-    /api/chat/      ← apps.chat.urls
-    /api/character/ ← apps.character.urls
-    /api/core/      ← apps.core.urls
+    /api/v1/accounts/  ← apps.accounts.urls
+    /api/v1/chat/      ← apps.chat.urls
+    /api/v1/character/ ← apps.character.urls
+    /api/v1/core/      ← apps.core.urls
 """
 
 from django.contrib import admin
@@ -22,10 +22,12 @@ urlpatterns = [
     path("admin/", admin.site.urls),
 
     # API 엔드포인트 (앱별 urls.py로 위임)
-    path("api/accounts/", include("apps.accounts.urls")),
-    path("api/chat/", include("apps.chat.urls")),
-    path("api/character/", include("apps.character.urls")),
-    path("api/core/", include("apps.core.urls")),
+    # 향후 API 버전 관리(v2 등) 및 체계적인 경로 관리를 위해 기본 prefix를 /api/v1/으로 지정합니다.
+    path("api/v1/auth/", include("apps.accounts.urls")),
+    path("api/v1/chat/", include("apps.chat.urls")),
+    path("api/v1/character/", include("apps.character.urls")),
+
+    path("api/v1/core/", include("apps.core.urls")),
 
     # React SPA Catch-all (클라이언트 사이드 라우팅 지원)
     # API 경로 이후에 위치해야 API 요청이 올바르게 처리됩니다.

@@ -6,21 +6,18 @@ pgvector를 사용하여 문서 임베딩을 저장하고 유사도 검색을 �
 """
 
 import logging
-import os
 
-import dotenv
 from langchain_postgres import PGVector
 
 # 절대경로 import: 상대경로의 try/except 분기를 제거하고 단일 경로로 통일합니다.
 from ai_server.rag.embeddings import QwenEmbeddings
 from ai_server.rag.document_loader import DocumentLoader
-
-dotenv.load_dotenv()
+from ai_server.config import settings
 
 logger = logging.getLogger(__name__)
 
-DB_CONNECTION = os.getenv("DB_CONNECTION")
-COLLECTION_NAME = os.getenv("COLLECTION_NAME")
+DB_CONNECTION = settings.db.connection
+COLLECTION_NAME = settings.db.collection_name
 
 
 def get_vectorstore() -> PGVector:
@@ -42,18 +39,25 @@ def get_vectorstore() -> PGVector:
 
 def build_database() -> None:
     """
-    JSON 파일을 읽고 pgvector에 저장합니다.
+    JSON 파일과 Redis에서 데이터를 읽어 pgvector에 저장합니다.
     RAG 데이터베이스 초기 구축 시 사용합니다.
     """
     document_loader = DocumentLoader()
-    docs = document_loader.load_json_file()
+    
+    # 1. 로컬 파일에서 로드 (캐릭터 데이터 등)
+    file_docs = document_loader.load_json_file()
+    
+    # 2. Redis에서 로드 (공지사항, 랭킹 등)
+    redis_docs = document_loader.load_from_redis()
+    
+    all_docs = file_docs + redis_docs
 
-    if not docs:
-        raise ValueError("로드된 문서 없음")
+    if not all_docs:
+        raise ValueError("로드된 문서가 없습니다.")
 
     vectorstore = get_vectorstore()
-    vectorstore.add_documents(docs)
-    logger.info("데이터베이스 구축 완료")
+    vectorstore.add_documents(all_docs)
+    logger.info(f"데이터베이스 구축 완료 (총 {len(all_docs)}개 문서 청크)")
 
 
 def get_retriever(k: int = 3):

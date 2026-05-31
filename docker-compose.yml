@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   db:
     image: ankane/pgvector:latest
@@ -15,13 +13,14 @@ services:
     restart: always
 
   redis:
-    image: redis:7-alpine
+    image: redis/redis-stack-server:latest
     container_name: mai_redis
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
     restart: always
+
 
   django:
     build:
@@ -31,23 +30,19 @@ services:
     ports:
       - "8000:8000"
     env_file:
-      - .env.prod
+      - env/.env.local
+    environment:
+      - DATABASE_HOST=db
+      - REDIS_URL=redis://redis:6379/0
+      - AI_SERVER_URL=http://fastapi:8001
     volumes:
       - .:/app
       - /app/.venv  # 로컬 가상환경(.venv)이 컨테이너 내부를 덮어쓰지 않도록 익명 볼륨 처리
     command: >
-      sh -c "python -c \"
-      import socket, time
-      s = socket.socket()
-      s.settimeout(1)
-      while True:
-          try:
-              s.connect(('db', 5432))
-              break
-          except Exception:
-              print('Waiting for database connection on db:5432...')
-              time.sleep(1)
-      \" && python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+      sh -c "until python -c \"import socket; socket.create_connection(('db', 5432), timeout=1)\" 2>/dev/null; do
+      echo 'Waiting for database connection on db:5432...';
+      sleep 1;
+      done && python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
     depends_on:
       - db
       - redis
@@ -61,23 +56,19 @@ services:
     ports:
       - "8001:8001"
     env_file:
-      - .env.prod
+      - env/.env.local
+    environment:
+      - DB_CONNECTION=postgresql+psycopg://postgres:ccg2558%21%40%23@db:5432/maple_chatbot_db
+      - REDIS_URL=redis://redis:6379/0
+      - MODEL_PATH=/app/fine_tuned_model/merged_qwen
     volumes:
       - .:/app
-      - /app/.venv  # 로컬 가상환경(.venv)이 컨테이너 내부를 덮어쓰지 않도록 익명 볼륨 처리
+      - /app/.venv  
     command: >
-      sh -c "python -c \"
-      import socket, time
-      s = socket.socket()
-      s.settimeout(1)
-      while True:
-          try:
-              s.connect(('db', 5432))
-              break
-          except Exception:
-              print('Waiting for database connection on db:5432...')
-              time.sleep(1)
-      \" && python -m ai_server.main"
+      sh -c "until python -c \"import socket; socket.create_connection(('db', 5432), timeout=1)\" 2>/dev/null; do
+      echo 'Waiting for database connection on db:5432...';
+      sleep 1;
+      done && python -m ai_server.main"
     depends_on:
       - db
       - redis
