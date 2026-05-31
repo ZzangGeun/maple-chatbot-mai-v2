@@ -1,45 +1,50 @@
-# 인증 및 캐릭터 연동 API 명세서 (Auth & Character APIs)
+# 인증 API 명세서 (Auth APIs)
 
-본 문서는 `maple-chatbot-mai-v2` 서비스의 사용자 인증(Signup/Login) 및 메이플스토리 캐릭터 연동 API 스펙을 정의합니다.
+본 문서는 `maple-chatbot-mai-v2` 서비스의 사용자 인증(회원가입/로그인/로그아웃/내 정보 조회) API 스펙을 정의합니다. 본 API는 Django의 **세션 기반 인증**을 사용합니다.
 
-* **Base URL:** `/api/v1/auth`
+* **Base URL:** `http://127.0.0.1:8000/api/v1/auth`
 
 ---
 
 ## 1. 회원가입 (Signup)
 
-* **Endpoint:** `POST /signup`
+* **Endpoint:** `POST /signup/`
 * **Content-Type:** `application/json`
 
-### Request Body
+### Request Body (JSON)
 ```json
 {
-  "username": "mapleuser123",
-  "password": "SecurePassword123!",
-  "email": "user@example.com"
+  "username": "testuser123",
+  "password": "testpass123",
+  "confirm_password": "testpass123",
+  "maple_nickname": "테스트캐릭",
+  "nexon_api_key": "test_c3a1c9dd9898748983795717d4054a737fc120e7a3a13c44c825904cd7953ea7efe8d04e6d233bd35cf2fabdeb93fb0d"
 }
 ```
+* **아이디 규칙:** 6~20자의 영문자, 숫자, 밑줄(_)만 가능
+* **비밀번호 규칙:** 최소 8자 이상, `confirm_password`와 완전히 일치해야 함
 
-### Response Body (201 Created)
+### Response Body
+
+#### 성공 (201 Created)
 ```json
 {
-  "success": true,
   "message": "회원가입이 완료되었습니다.",
-  "user": {
-    "id": 45,
-    "username": "mapleuser123",
-    "email": "user@example.com"
-  }
+  "username": "testuser123",
+  "maple_nickname": "테스트캐릭"
 }
 ```
 
-### Error Responses
-* **400 Bad Request (중복 아이디 존재 등):**
+#### 실패 (400 Bad Request - 유효성 검사 실패 등)
 ```json
 {
-  "success": false,
-  "error_code": "DUPLICATE_USERNAME",
-  "message": "이미 존재하는 아이디입니다."
+  "detail": "비밀번호는 최소 8자 이상이어야 합니다."
+}
+```
+또는
+```json
+{
+  "detail": "이미 존재하는 아이디입니다."
 }
 ```
 
@@ -47,85 +52,107 @@
 
 ## 2. 로그인 (Login)
 
-* **Endpoint:** `POST /login`
+* **Endpoint:** `POST /login/`
 * **Content-Type:** `application/json`
+* **참고:** 로그인 성공 시 응답 헤더의 `Set-Cookie`를 통해 세션 쿠키(`sessionid`)가 브라우저 및 Postman에 저장됩니다. 이후 요청 시 Postman이 자동으로 해당 쿠키를 동봉하여 전송합니다.
 
-### Request Body
+### Request Body (JSON)
 ```json
 {
-  "username": "mapleuser123",
-  "password": "SecurePassword123!"
+  "username": "testuser123",
+  "password": "testpass123"
 }
 ```
 
-### Response Body (200 OK)
+### Response Body
+
+#### 성공 (200 OK)
 ```json
 {
-  "success": true,
-  "access_token": "eyJhbGciOiJIUzI1NiIsIn...",
-  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5...",
-  "expires_in": 3600
+  "message": "testuser123님, 환영합니다!",
+  "user": {
+    "id": 1,
+    "username": "testuser123",
+    "email": ""
+  },
+  "maple_nickname": "테스트캐릭"
+}
+```
+
+#### 실패 (401 Unauthorized - 아이디 없음)
+```json
+{
+  "detail": "존재하지 않는 아이디입니다."
+}
+```
+
+#### 실패 (401 Unauthorized - 비밀번호 불일치)
+```json
+{
+  "detail": "비밀번호가 일치하지 않습니다."
 }
 ```
 
 ---
 
-## 3. 메이플스토리 캐릭터 연동 요청 (Character Link Request)
+## 3. 로그아웃 (Logout)
 
-* **Endpoint:** `POST /character/link`
-* **Headers:** `Authorization: Bearer <access_token>`
+* **Endpoint:** `POST /logout/`
+* **참고:** 세션 인증이 필요하므로, 로그인이 완료된 Postman 세션에서 호출해야 합니다.
 
 ### Request Body
+없음 (비어있음)
+
+### Response Body
+
+#### 성공 (200 OK)
 ```json
 {
-  "character_name": "아델은최강"
+  "message": "로그아웃되었습니다."
 }
 ```
 
-### Response Body (200 OK)
+#### 실패 (401 Unauthorized - 로그인하지 않은 상태)
 ```json
 {
-  "success": true,
-  "verification_code": "MAI-9824",
-  "message": "캐릭터 인증 코드 발급 완료. 인게임 캐릭터 소개글에 위 인증 코드를 삽입한 후 /verify 엔드포인트를 호출하세요."
+  "detail": "로그인 상태가 아닙니다."
 }
 ```
 
 ---
 
-## 4. 메이플스토리 캐릭터 인증 확인 (Character Verification Confirm)
+## 4. 내 정보 조회 (User Info)
 
-* **Endpoint:** `POST /character/verify`
-* **Headers:** `Authorization: Bearer <access_token>`
+* **Endpoint:** `GET /user/`
+* **참고:** 세션 인증이 필요합니다. 로그인된 사용자 본인의 정보를 반환합니다.
 
 ### Request Body
-```json
-{
-  "character_name": "아델은최강",
-  "verification_code": "MAI-9824"
-}
-```
+없음
 
-### Response Body (200 OK)
+### Response Body
+
+#### 성공 (200 OK)
 ```json
 {
-  "success": true,
-  "message": "캐릭터 본인 인증이 성공적으로 완료되었습니다.",
-  "character": {
-    "character_name": "아델은최강",
-    "world_name": "루나",
-    "ocid": "cf64a856fdbdfd...",
-    "is_main": true
+  "id": 1,
+  "username": "testuser123",
+  "email": "",
+  "profile": {
+    "maple_nickname": "테스트캐릭"
   }
 }
 ```
 
-### Error Responses
-* **400 Bad Request (인증 코드 불일치):**
+#### 실패 (401 Unauthorized - 로그인 정보 없음)
 ```json
 {
-  "success": false,
-  "error_code": "VERIFICATION_FAILED",
-  "message": "인게임 소개글에서 인증 코드를 확인할 수 없거나 일치하지 않습니다."
+  "detail": "로그인이 필요합니다."
 }
 ```
+
+---
+
+## 💡 Postman 테스트 팁
+
+1. **세션 유지:** Postman은 로그인(`POST /login/`) 시 반환받은 `sessionid` 쿠키를 자동으로 저장하고, 동일한 도메인의 다음 요청(`GET /user/`, `POST /logout/`)에 자동으로 쿠키 헤더를 담아 보냅니다. 별도로 Bearer Token 설정을 하실 필요가 없습니다.
+2. **CSRF 데코레이터:** 현재 `signup/`, `login/`, `logout/` 엔드포인트에는 `@csrf_exempt` 데코레이터가 설정되어 있어, CSRF 토큰 없이도 편리하게 Postman으로 POST 테스트를 진행하실 수 있습니다.

@@ -23,7 +23,7 @@ class SignupSchema(BaseModel):
     password: str
     confirm_password: str
     maple_nickname: str
-    nexon_api_key: str = ""
+    nexon_api_key: str
 
     @field_validator("username")
     @classmethod
