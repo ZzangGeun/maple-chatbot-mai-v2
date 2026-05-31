@@ -154,6 +154,7 @@ def get_messages(request, session_id: str) -> JsonResponse:
                     "id": msg.id * 2 + 1,
                     "sender_type": "assistant",
                     "message_content": msg.ai_response,
+                    "thinking": msg.thinking or "",
                     "sent_at": msg.created_at.isoformat(),
                 }
             )

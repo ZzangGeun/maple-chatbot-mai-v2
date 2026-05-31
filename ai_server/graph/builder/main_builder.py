@@ -20,9 +20,6 @@ from ai_server.graph.builder.nexon_builder import nexon_graph
 def build_main_graph(checkpointer: BaseCheckpointSaver | None = None) -> CompiledStateGraph:
     workflow = StateGraph(MainState)
 
-    # 노드 등록
-    workflow.add_node("gemini_route", gemini_route_node)
-    
     # 서브 그래프를 메인 그래프의 노드로 등록
     workflow.add_node("rag_graph", rag_graph)
     workflow.add_node("nexon_graph", nexon_graph)
@@ -30,14 +27,10 @@ def build_main_graph(checkpointer: BaseCheckpointSaver | None = None) -> Compile
     # 단일 노드(채팅) 등록
     workflow.add_node("chat_node", gemini_chat_node)
 
-    # 엣지 연결
-    # START -> 라우팅 노드
-    workflow.add_edge(START, "gemini_route")
-
-    # 라우팅 노드 -> 각 서브 그래프/노드
+    # START -> 각 서브 그래프/노드로 조건부 라우팅
     workflow.add_conditional_edges(
-        "gemini_route",
-        lambda x: x, # 라우터 노드의 반환값이 다음 대상의 노드 이름이 되도록 함
+        START,
+        gemini_route_node,
         {
             "rag_graph": "rag_graph",
             "nexon_graph": "nexon_graph",

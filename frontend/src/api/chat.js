@@ -2,24 +2,24 @@ import client from './client';
 
 // 세션 생성
 export const createSession = () =>
-  client.post('/api/v1/chat/sessions/create/');
+  client.post('/api/v1/chat/rooms/');
 
 // 세션 목록 조회
 export const getSessions = () =>
-  client.get('/api/v1/chat/sessions/');
+  client.get('/api/v1/chat/rooms/');
 
 // 세션의 메시지 목록 조회
 export const getMessages = (sessionId) =>
-  client.get(`/api/v1/chat/sessions/${sessionId}/messages/`);
+  client.get(`/api/v1/chat/rooms/${sessionId}/messages/`);
 
 // 세션 삭제
 export const deleteSession = (sessionId) =>
-  client.delete(`/api/v1/chat/sessions/${sessionId}/delete/`);
+  client.delete(`/api/v1/chat/rooms/${sessionId}/`);
 
 // 스트리밍 메시지 전송
 export const streamMessage = async (sessionId, content, onChunk, onDone, onError) => {
   try {
-    const response = await fetch(`/api/v1/chat/sessions/${sessionId}/stream/`, {
+    const response = await fetch(`/api/v1/chat/rooms/${sessionId}/stream/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

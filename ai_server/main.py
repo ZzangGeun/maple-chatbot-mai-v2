@@ -14,12 +14,12 @@ import re
 from typing import Any
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request, APIRouter, BackgroundTasks, Header
+from fastapi import APIRouter, BackgroundTasks, FastAPI, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
-from ai_server.config import settings
 
+from ai_server.config import settings
 
 # main_builder.py가 넥슨 API, Gemini, 로컬 LLM을 조합한 메인 그래프 및 서브 그래프를 제공합니다.
 
@@ -126,7 +126,9 @@ async def generate_response(request: QueryRequest, raw_request: Request) -> dict
 
 
 @app.post("/stream")
-async def stream_response(request: QueryRequest, raw_request: Request) -> StreamingResponse:
+async def stream_response(
+    request: QueryRequest, raw_request: Request
+) -> StreamingResponse:
     """
     SSE(Server-Sent Events) 스트리밍 답변 생성 엔드포인트.
 
@@ -215,8 +217,8 @@ async def single_rag_query(request: SingleQueryRequest):
     try:
         logger.info(f"일회성 RAG 쿼리 수신: {request.query} (top_k: {request.top_k})")
 
-        from ai_server.rag.retriever import Retriever
         from ai_server.llm.factory import get_llm
+        from ai_server.rag.retriever import Retriever
 
         retriever = Retriever(k=request.top_k)
         docs = retriever.retrieve(request.query)
@@ -250,7 +252,9 @@ async def single_rag_query(request: SingleQueryRequest):
                 {
                     "title": doc.metadata.get("title", "제목 없음"),
                     "source": doc.metadata.get("source", "알 수 없음"),
-                    "score": doc.metadata.get("score", 1.0),  # pgvector/Chroma score fallback
+                    "score": doc.metadata.get(
+                        "score", 1.0
+                    ),  # pgvector/Chroma score fallback
                 }
             )
 
@@ -263,7 +267,8 @@ async def single_rag_query(request: SingleQueryRequest):
     except Exception as e:
         logger.error(f"일회성 RAG 쿼리 처리 실패: {e}")
         raise HTTPException(
-            status_code=500, detail=f"RAG 질의응답 중 내부 오류가 발생했습니다: {str(e)}"
+            status_code=500,
+            detail=f"RAG 질의응답 중 내부 오류가 발생했습니다: {str(e)}",
         )
 
 
@@ -321,7 +326,9 @@ async def trigger_embedding_sync(
     관리자 전용 토큰을 검증한 뒤, 백그라운드 태스크로 벡터 임베딩 갱신 파이프라인을 작동시킵니다.
     """
     if not authorization or not authorization.startswith("Bearer "):
-        logger.warning("관리자 인증 토큰 누락. 개발 및 디버깅을 위해 태스크는 강제 실행됩니다.")
+        logger.warning(
+            "관리자 인증 토큰 누락. 개발 및 디버깅을 위해 태스크는 강제 실행됩니다."
+        )
 
     try:
         from ai_server.rag.character_batch import run_character_embedding_batch
@@ -337,7 +344,8 @@ async def trigger_embedding_sync(
     except Exception as e:
         logger.error(f"임베딩 동기화 백그라운드 적재 실패: {e}")
         raise HTTPException(
-            status_code=500, detail="백그라운드 임베딩 태스크 실행 중 오류가 발생했습니다."
+            status_code=500,
+            detail="백그라운드 임베딩 태스크 실행 중 오류가 발생했습니다.",
         )
 
 
@@ -347,4 +355,3 @@ if __name__ == "__main__":
     # 프로젝트 루트에서 실행해야 절대경로 import가 정상 동작합니다.
     # 실행 명령: python -m ai_server.main
     uvicorn.run(app, host="0.0.0.0", port=8001)
-

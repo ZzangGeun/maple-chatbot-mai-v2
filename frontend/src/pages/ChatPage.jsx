@@ -40,9 +40,10 @@ const ChatPage = () => {
         setIsLoading(true);
         try {
           const response = await chatApi.getMessages(sessionId);
-          const formattedMessages = response.data.data.map(msg => ({
-            role: msg.role,  // 백엔드가 이제 role을 직접 반환
-            content: msg.content,
+          const messageData = response.data.messages || response.data.data || [];
+          const formattedMessages = messageData.map(msg => ({
+            role: msg.sender_type || msg.role,  // 백엔드가 이제 sender_type을 직접 반환
+            content: msg.message_content || msg.content,
             thinking: msg.thinking || ''  // thinking 필드 추가
           }));
           setMessages(formattedMessages);
@@ -57,7 +58,7 @@ const ChatPage = () => {
       const createNewChat = async () => {
         try {
           const response = await chatApi.createSession();
-          const newSession = response.data.data;
+          const newSession = response.data.room || response.data.data;
           setSessions(prev => [newSession, ...prev]);
           setCurrentSessionId(newSession.id);
           setMessages([]);
@@ -76,7 +77,7 @@ const ChatPage = () => {
         if (isLoggedIn) {
           try {
             const response = await chatApi.getSessions();
-            sessionList = response.data.data;
+            sessionList = response.data.rooms || response.data.data || [];
           } catch (error) {
             console.error("Failed to load sessions:", error);
           }
@@ -115,9 +116,10 @@ const ChatPage = () => {
     setIsLoading(true);
     try {
       const response = await chatApi.getMessages(sessionId);
-      const formattedMessages = response.data.data.map(msg => ({
-        role: msg.role,  // 백엔드가 이제 role을 직접 반환
-        content: msg.content,
+      const messageData = response.data.messages || response.data.data || [];
+      const formattedMessages = messageData.map(msg => ({
+        role: msg.sender_type || msg.role,  // 백엔드가 이제 sender_type을 직접 반환
+        content: msg.message_content || msg.content,
         thinking: msg.thinking || ''  // thinking 필드 추가
       }));
       setMessages(formattedMessages);
@@ -133,7 +135,7 @@ const ChatPage = () => {
   const handleNewChat = async () => {
     try {
       const response = await chatApi.createSession();
-      const newSession = response.data.data;
+      const newSession = response.data.room || response.data.data;
       setSessions(prev => [newSession, ...prev]);
       setCurrentSessionId(newSession.id);
       setMessages([]);
@@ -163,7 +165,7 @@ const ChatPage = () => {
     if (typeof activeSessionId === 'string' && activeSessionId.startsWith('temp-')) {
       try {
         const response = await chatApi.createSession();
-        const newSession = response.data.data;
+        const newSession = response.data.room || response.data.data;
         activeSessionId = newSession.id;
         setCurrentSessionId(activeSessionId);
         setSessions(prev => [newSession, ...prev]);
@@ -324,12 +326,12 @@ const ChatPage = () => {
                 }}
               >
                 <div className="history-date">
-                  {new Date(session.created_at).toLocaleDateString()}
+                  {new Date(session.created_at || session.updated_at).toLocaleDateString()}
                   {session.id === currentSessionId && ' (현재)'}
                 </div>
                 <div className="history-text">
                   {/* 제목(첫 대화 요약) 사용 */}
-                  {session.title || `채팅 #${session.id.substring(0, 8)}`}
+                  {session.room_name || session.title || `채팅 #${session.id.substring(0, 8)}`}
                 </div>
               </div>
             ))
