@@ -26,6 +26,7 @@ logger = logging.getLogger("LocalLLMLoader")
 
 MODEL_PATH = os.getenv("MODEL_PATH")
 BASE_MODEL = os.getenv("BASE_MODEL")
+LOCAL_MAX_NEW_TOKENS = int(os.getenv("LOCAL_MAX_NEW_TOKENS", "512"))
 
 
 class LocalLLMLoader:
@@ -48,12 +49,13 @@ class LocalLLMLoader:
                 torch_dtype=torch.float16,
                 device_map="cuda",
             )
+            model.generation_config.max_length = None
 
             pipe = pipeline(
                 "text-generation",
                 model=model,
                 tokenizer=tokenizer,
-                max_length=1024,
+                max_new_tokens=LOCAL_MAX_NEW_TOKENS,
                 do_sample=True,
                 temperature=0.7,
                 top_p=0.9,

@@ -28,6 +28,8 @@ logger = logging.getLogger("LocalNodes")
 
 # 모듈 레벨 초기화
 _retriever_instance = Retriever()
+MAX_DOC_CHARS = 1200
+MAX_CONTEXT_CHARS = 4000
 
 
 def local_retrieve_node(state: GraphState) -> dict:
@@ -56,13 +58,13 @@ def local_retrieve_node(state: GraphState) -> dict:
             url_line,
             "",
             "**내용**:",
-            doc.page_content,
+            doc.page_content[:MAX_DOC_CHARS],
             "",
             "---",
         ])
         context_parts.append(context_part)
 
-    context_text = "\n".join(context_parts)
+    context_text = "\n".join(context_parts)[:MAX_CONTEXT_CHARS]
     logger.info(f"[LocalRetrieve] {len(docs)}개 문서 검색 완료 | 쿼리: '{query}'")
     if docs:
         logger.info(f"[LocalRetrieve] 첫 번째 문서 미리보기: {docs[0].page_content[:80]}...")
