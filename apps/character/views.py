@@ -1,22 +1,20 @@
 # character/views.py
-"""
-캐릭터 정보 뷰 모듈 (표준 Django JsonResponse)
+"""캐릭터 정보 뷰 모듈 (표준 Django JsonResponse)
 
 넥슨 API에서 캐릭터 정보를 조회하여 반환합니다.
-실제 API 호출은 apps.character.nexon 패키지에 위임합니다.
+실제 API 호출 및 비즈니스 검증 처리는 서비스 레이어(services.py)와 nexon 패키지에 위임합니다.
 """
 
 import logging
 import json
-import random
-import os
 
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from django.conf import settings
 
 from apps.character.nexon import get_character_data
+from apps.character.services import generate_verification_code, verify_and_link_character
+
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +58,7 @@ async def character_search(request) -> JsonResponse:
 @csrf_exempt
 @require_http_methods(["POST"])
 async def character_link(request) -> JsonResponse:
-    """
-    메이플스토리 캐릭터 연동 신청 API.
+    """메이플스토리 캐릭터 연동 신청 API.
 
     POST /api/v1/auth/character/link
     """
@@ -86,15 +83,8 @@ async def character_link(request) -> JsonResponse:
             status=400,
         )
 
-    # 1회성 6자리 인증 코드 생성 (예: MAI-1234)
-    rand_num = random.randint(1000, 9999)
-    verification_code = f"MAI-{rand_num}"
-
-    # 세션에 임시 보관 (캐릭터명과 인증 코드를 대조 검증하기 위함)
-    request.session[f"verify_code_{character_name}"] = verification_code
-    request.session.modified = True
-
-    logger.info(f"캐릭터 연동 코드 발급 완료: {character_name} -> {verification_code}")
+    # 비즈니스 서비스 호출: 1회성 6자리 인증 코드 발급
+    verification_code = generate_verification_code(request.session, character_name)
 
     return JsonResponse(
         {
@@ -109,8 +99,7 @@ async def character_link(request) -> JsonResponse:
 @csrf_exempt
 @require_http_methods(["POST"])
 async def character_verify(request) -> JsonResponse:
-    """
-    메이플스토리 캐릭터 인증 완료 API.
+    """메이플스토리 캐릭터 인증 완료 API.
 
     POST /api/v1/auth/character/verify
     """
@@ -136,123 +125,44 @@ async def character_verify(request) -> JsonResponse:
             status=400,
         )
 
-    # 세션에 기록된 임시 인증 코드 비교
-    cached_code = request.session.get(f"verify_code_{character_name}")
-    if not cached_code or cached_code != verification_code:
+    # 비즈니스 서비스 호출: 세션 검증 + 넥슨 API 인증 대조 + DB 연동 생성/갱신
+    success, error_code, character_info = await verify_and_link_character(
+        user=request.user,
+        session=request.session,
+        character_name=character_name,
+        verification_code=verification_code,
+    )
+
+    if not success:
+        error_messages = {
+            "VERIFICATION_FAILED": "인증 코드가 만료되었거나 일치하지 않습니다.",
+            "CHARACTER_NOT_FOUND": "해당 캐릭터를 찾을 수 없습니다.",
+            "CODE_MISMATCH": "인게임 소개글에서 인증 코드를 확인할 수 없거나 일치하지 않습니다.",
+            "API_COMMUNICATION_ERROR": "넥슨 API 서버 통신 중 오류가 발생했습니다.",
+            "SERVER_ERROR": "서버 내부 오류가 발생했습니다.",
+        }
+        status_codes = {
+            "VERIFICATION_FAILED": 400,
+            "CHARACTER_NOT_FOUND": 404,
+            "CODE_MISMATCH": 400,
+            "API_COMMUNICATION_ERROR": 502,
+            "SERVER_ERROR": 500,
+        }
+        message = error_messages.get(error_code, "본인 인증에 실패했습니다.")
+        status_code = status_codes.get(error_code, 400)
+        
         return JsonResponse(
-            {"success": False, "error_code": "VERIFICATION_FAILED", "message": "인증 코드가 만료되었거나 일치하지 않습니다."},
-            status=400,
+            {"success": False, "error_code": error_code, "message": message},
+            status=status_code,
         )
 
-    # 넥슨 API 통신 환경 확인
-    nexon_api_key = os.getenv("NEXON_API_KEY", "")
-    
-    # 디버깅 환경이거나 API Key가 비어있는 경우 Mock 성공 처리 (개발 편의성 목적)
-    if settings.DEBUG and not nexon_api_key:
-        logger.warning("NEXON_API_KEY가 존재하지 않아 개발 디버깅 모드로 자동 인증 성공 처리합니다.")
-        
-        # 가상의 데이터로 저장
-        from apps.character.models import CharacterLink
-        from django.utils import timezone
-        
-        is_first = not await CharacterLink.objects.filter(user=request.user).aexists()
-        
-        char_link, created = await CharacterLink.objects.aupdate_or_create(
-            user=request.user,
-            character_name=character_name,
-            defaults={
-                "ocid": f"mock_ocid_{random.randint(100000, 999999)}",
-                "world_name": "루나",
-                "is_main": is_first,
-                "verified_at": timezone.now()
-            }
-        )
-        
-        # 인증 코드 사용 후 세션에서 제거
-        del request.session[f"verify_code_{character_name}"]
-        request.session.modified = True
-        
-        return JsonResponse(
-            {
-                "success": True,
-                "message": "캐릭터 본인 인증이 성공적으로 완료되었습니다. (Debug Mock)",
-                "character": {
-                    "character_name": char_link.character_name,
-                    "world_name": char_link.world_name,
-                    "ocid": char_link.ocid,
-                    "is_main": char_link.is_main
-                }
-            },
-            status=200,
-        )
+    return JsonResponse(
+        {
+            "success": True,
+            "message": "캐릭터 본인 인증이 성공적으로 완료되었습니다.",
+            "character": character_info,
+        },
+        status=200,
+    )
 
-    # 실제 넥슨 Open API 통신 검증 로직 실행
-    import aiohttp
-    from apps.character.nexon.client import fetch_character_ocid, _fetch_single_endpoint, _build_headers
-    
-    headers = _build_headers(nexon_api_key)
-    
-    async with aiohttp.ClientSession() as session:
-        # 1. OCID 조회
-        ocid = await fetch_character_ocid(session, character_name, headers)
-        if not ocid:
-            return JsonResponse(
-                {"success": False, "error_code": "CHARACTER_NOT_FOUND", "message": "해당 캐릭터를 찾을 수 없습니다."},
-                status=404
-            )
-            
-        # 2. 기본 정보 조회 (소개글 확인 목적)
-        basic_info = await _fetch_single_endpoint(session, "get_character_basic_info", ocid, headers)
-        
-        # 넥슨 API 응답에 맞춰 소개글 파싱 (캐릭터 프로필 소개글은 character_description 필드에 탑재)
-        character_desc = basic_info.get("character_description", "") or ""
-        world_name = basic_info.get("world_name", "알 수 없음")
-        
-        # 소개글에 발급된 인증코드가 포함되어 있는지 대조
-        if verification_code not in character_desc:
-            return JsonResponse(
-                {
-                    "success": False,
-                    "error_code": "VERIFICATION_FAILED",
-                    "message": "인게임 소개글에서 인증 코드를 확인할 수 없거나 일치하지 않습니다."
-                },
-                status=400
-            )
-            
-        # 3. 인증 통과 시 DB에 연동 데이터 기록/갱신
-        from apps.character.models import CharacterLink
-        from django.utils import timezone
-        
-        is_first = not await CharacterLink.objects.filter(user=request.user).aexists()
-        
-        char_link, created = await CharacterLink.objects.aupdate_or_create(
-            user=request.user,
-            character_name=character_name,
-            defaults={
-                "ocid": ocid,
-                "world_name": world_name,
-                "is_main": is_first,
-                "verified_at": timezone.now()
-            }
-        )
-        
-        # 성공 시 임시 세션 삭제
-        del request.session[f"verify_code_{character_name}"]
-        request.session.modified = True
-        
-        logger.info(f"캐릭터 연동 본인 인증 완료: {character_name} -> {request.user.username}")
-        
-        return JsonResponse(
-            {
-                "success": True,
-                "message": "캐릭터 본인 인증이 성공적으로 완료되었습니다.",
-                "character": {
-                    "character_name": char_link.character_name,
-                    "world_name": char_link.world_name,
-                    "ocid": char_link.ocid,
-                    "is_main": char_link.is_main
-                }
-            },
-            status=200
-        )
 

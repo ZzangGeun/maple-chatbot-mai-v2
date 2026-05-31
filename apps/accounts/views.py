@@ -34,14 +34,14 @@ def _parse_json_body(request) -> dict:
 
 @csrf_exempt
 @require_http_methods(["POST"])
-def signup(request) -> JsonResponse:
+async def signup(request) -> JsonResponse:
     """
     회원가입 엔드포인트.
 
     POST /api/v1/accounts/signup/
 
     - Pydantic 스키마에서 1차 유효성 검사(형식, 비밀번호 일치)
-    - services.validate_signup_data에서 2차 검사(중복 여부)
+    - services.validate_signup_data에서 2차 검사(중복 여부 및 넥슨 캐릭터 본인확인)
     """
     raw_data = _parse_json_body(request)
 
@@ -54,24 +54,25 @@ def signup(request) -> JsonResponse:
             status=400,
         )
 
-    # DB 중복 등 비즈니스 규칙 검사
-    is_valid, error_message = validate_signup_data(
+    # DB 중복 등 비즈니스 규칙 및 넥슨 API 인증 검사
+    is_valid, error_message = await validate_signup_data(
         {
             "user_id": data.username,
             "password": data.password,
             "confirm_password": data.confirm_password,
             "maple_nickname": data.maple_nickname,
+            "nexon_api_key": data.nexon_api_key,
         }
     )
     if not is_valid:
         return JsonResponse({"detail": error_message}, status=400)
 
     try:
-        user = create_user_with_profile(
+        user = await create_user_with_profile(
             user_id=data.username,
             password=data.password,
             maple_nickname=data.maple_nickname,
-            nexon_api_key=data.nexon_api_key or None,
+            nexon_api_key=data.nexon_api_key,
         )
         return JsonResponse(
             {
@@ -108,11 +109,23 @@ def login_view(request) -> JsonResponse:
             status=400,
         )
 
-    user = authenticate(request, username=data.username, password=data.password)
+    # 1. 아이디 존재 여부 검사 (보안상 권장되지는 않으나 명확한 오류 피드백을 위해 분리)
+    if not User.objects.filter(username=data.username).exists():
+        logger.warning(f"로그인 실패 (존재하지 않는 아이디): {data.username}")
+        return JsonResponse(
+            {"detail": "존재하지 않는 아이디입니다."}, status=401
+        )
+
+    credentials = {
+        "username": data.username,
+        "password": data.password,
+    }
+    user = authenticate(**credentials)
 
     if user is None:
+        logger.warning(f"로그인 실패 (비밀번호 불일치): {data.username}")
         return JsonResponse(
-            {"detail": "아이디 또는 비밀번호가 일치하지 않습니다."}, status=401
+            {"detail": "비밀번호가 일치하지 않습니다."}, status=401
         )
 
     if not user.is_active:
@@ -120,11 +133,8 @@ def login_view(request) -> JsonResponse:
 
     login(request, user)
 
-    maple_nickname = None
-    try:
-        maple_nickname = user.userprofile.maple_nickname
-    except UserProfile.DoesNotExist:
-        pass
+    profile = UserProfile.objects.get_by_user_or_none(user)
+    maple_nickname = profile.maple_nickname if profile else None
 
     logger.info(f"로그인 성공: {data.username}")
 
@@ -167,11 +177,8 @@ def user_info(request) -> JsonResponse:
         return JsonResponse({"detail": "로그인이 필요합니다."}, status=401)
 
     user: User = request.user
-    maple_nickname = None
-    try:
-        maple_nickname = user.userprofile.maple_nickname
-    except UserProfile.DoesNotExist:
-        pass
+    profile = UserProfile.objects.get_by_user_or_none(user)
+    maple_nickname = profile.maple_nickname if profile else None
 
     return JsonResponse(
         {

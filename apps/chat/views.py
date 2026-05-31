@@ -1,6 +1,5 @@
 # apps/chat/views.py
-"""
-챗봇 API 뷰 (표준 Django JsonResponse + StreamingHttpResponse)
+"""챗봇 API 뷰 (표준 Django JsonResponse + StreamingHttpResponse)
 
 비즈니스 로직은 apps.chat.services로 분리되었습니다.
 HTTP 인터페이스 처리와 라우팅만 담당합니다.
@@ -8,46 +7,15 @@ HTTP 인터페이스 처리와 라우팅만 담당합니다.
 
 import json
 import logging
-import uuid
 
 from django.http import JsonResponse, StreamingHttpResponse
-from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from apps.chat.models import ChatSession
 from apps.chat.services import send_message_sync, stream_message_generator
-from common.exceptions.chat import InvalidSessionId, SessionNotFound
 
 logger = logging.getLogger(__name__)
-
-
-def _get_session_or_raise(session_id: str) -> ChatSession:
-    """세션을 안전하게 조회하고 없을 경우 커스텀 예외를 발생시킵니다."""
-    try:
-        session_uuid = uuid.UUID(session_id)
-    except ValueError:
-        raise InvalidSessionId()
-
-    session = ChatSession.objects.filter(session_id=session_uuid).first()
-    if not session:
-        raise SessionNotFound(session_id)
-    
-    return session
-
-
-async def _aget_session_or_raise(session_id: str) -> ChatSession:
-    """세션을 안전하게 비동기로 조회하고 없을 경우 커스텀 예외를 발생시킵니다."""
-    try:
-        session_uuid = uuid.UUID(session_id)
-    except ValueError:
-        raise InvalidSessionId()
-
-    session = await ChatSession.objects.filter(session_id=session_uuid).afirst()
-    if not session:
-        raise SessionNotFound(session_id)
-    
-    return session
 
 
 # ---------------------------------------------------------------------------
@@ -127,12 +95,11 @@ def create_session(request) -> JsonResponse:
 
 
 def get_messages(request, session_id: str) -> JsonResponse:
-    """
-    특정 세션의 메시지 목록 조회.
+    """특정 세션의 메시지 목록 조회.
 
     GET /api/v1/chat/rooms/{room_id}/messages
     """
-    session = _get_session_or_raise(session_id)
+    session = ChatSession.objects.get_by_uuid_or_raise(session_id)
     messages = session.messages.all().order_by("created_at")
 
     message_list = []
@@ -163,12 +130,11 @@ def get_messages(request, session_id: str) -> JsonResponse:
 
 
 def send_message(request, session_id: str) -> JsonResponse:
-    """
-    세션에 메시지를 전송하고 AI 답변 수신 (동기).
+    """세션에 메시지를 전송하고 AI 답변 수신 (동기).
 
     POST /api/v1/chat/rooms/{room_id}/messages
     """
-    session = _get_session_or_raise(session_id)
+    session = ChatSession.objects.get_by_uuid_or_raise(session_id)
 
     try:
         body = json.loads(request.body)
@@ -203,12 +169,11 @@ def send_message(request, session_id: str) -> JsonResponse:
 
 
 def delete_session(request, session_id: str) -> JsonResponse:
-    """
-    특정 채팅 세션 삭제.
+    """특정 채팅 세션 삭제.
 
     DELETE /api/v1/chat/rooms/{room_id}
     """
-    session = _get_session_or_raise(session_id)
+    session = ChatSession.objects.get_by_uuid_or_raise(session_id)
     session.delete()
     return JsonResponse({"success": True, "message": "대화방이 삭제되었습니다."}, status=200)
 
@@ -250,12 +215,11 @@ def room_detail_dispatch(request, session_id: str) -> JsonResponse:
 @csrf_exempt
 @require_http_methods(["POST"])
 def stream_message(request, session_id: str) -> StreamingHttpResponse:
-    """
-    세션에 메시지를 전송하고 AI 서버로부터 스트리밍 응답 수신 (SSE).
+    """세션에 메시지를 전송하고 AI 서버로부터 스트리밍 응답 수신 (SSE).
 
     POST /api/v1/chat/sessions/<session_id>/stream/
     """
-    session = _get_session_or_raise(session_id)
+    session = ChatSession.objects.get_by_uuid_or_raise(session_id)
 
     try:
         body = json.loads(request.body)

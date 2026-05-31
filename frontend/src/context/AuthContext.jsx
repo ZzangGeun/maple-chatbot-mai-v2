@@ -82,7 +82,9 @@ export const AuthProvider = ({ children }) => {
       dispatch({ type: 'LOGIN_SUCCESS', payload: response.data.user });
       return { success: true };
     } catch (error) {
-      const errorMessage = error.response?.data?.error || '로그인 실패';
+      const errorMessage = error.response?.data?.detail || 
+        error.response?.data?.error || 
+        '로그인 실패';
       dispatch({ type: 'LOGIN_FAILURE', payload: errorMessage });
       return { success: false, error: errorMessage };
     }
