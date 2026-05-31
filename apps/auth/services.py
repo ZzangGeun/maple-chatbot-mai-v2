@@ -1,4 +1,4 @@
-# accounts/services.py
+# auth/services.py
 """
 계정(회원가입/로그인) 비즈니스 로직 모듈
 
@@ -12,7 +12,7 @@ import re
 from asgiref.sync import sync_to_async
 from django.contrib.auth.models import User
 
-from apps.accounts.models import UserProfile
+from apps.auth.models import UserProfile
 from apps.character.nexon.character_service import process_signup_with_key
 
 logger = logging.getLogger(__name__)

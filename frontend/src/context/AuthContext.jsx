@@ -82,9 +82,22 @@ export const AuthProvider = ({ children }) => {
       dispatch({ type: 'LOGIN_SUCCESS', payload: response.data.user });
       return { success: true };
     } catch (error) {
-      const errorMessage = error.response?.data?.detail || 
-        error.response?.data?.error || 
-        '로그인 실패';
+      let errorMessage = '로그인 실패';
+      if (error.response && error.response.data) {
+        const data = error.response.data;
+        errorMessage = data.detail || data.error || data.message || '로그인 실패';
+        if (typeof data === 'string') {
+          try {
+            const parsed = JSON.parse(data);
+            errorMessage = parsed.detail || parsed.error || parsed.message || data;
+          } catch (e) {
+            errorMessage = data;
+          }
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       dispatch({ type: 'LOGIN_FAILURE', payload: errorMessage });
       return { success: false, error: errorMessage };
     }
@@ -98,9 +111,22 @@ export const AuthProvider = ({ children }) => {
       dispatch({ type: 'CLOSE_SIGNUP_MODAL' });
       return { success: true, message: '회원가입이 완료되었습니다.' };
     } catch (error) {
-      const errorMessage = error.response?.data?.error ||
-        error.response?.data?.message ||
-        '회원가입 실패';
+      let errorMessage = '회원가입 실패';
+      if (error.response && error.response.data) {
+        const data = error.response.data;
+        errorMessage = data.detail || data.error || data.message || '회원가입 실패';
+        if (typeof data === 'string') {
+          try {
+            const parsed = JSON.parse(data);
+            errorMessage = parsed.detail || parsed.error || parsed.message || data;
+          } catch (e) {
+            errorMessage = data;
+          }
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       dispatch({ type: 'SET_ERROR', payload: errorMessage });
       return { success: false, error: errorMessage };
     }

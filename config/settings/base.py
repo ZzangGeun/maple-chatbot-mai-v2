@@ -4,6 +4,7 @@
 """
 
 from pathlib import Path
+
 from decouple import config
 
 # 프로젝트 최상위 디렉토리 (MAP_Help_You/)
@@ -23,7 +24,7 @@ DJANGO_APPS = [
 
 LOCAL_APPS = [
     "apps.core",
-    "apps.accounts",
+    "apps.auth",
     "apps.character",
     "apps.chat",
 ]

@@ -1,4 +1,4 @@
-# accounts/schemas.py
+# auth/schemas.py
 """
 계정 API 요청 스키마 (Pydantic v2 기반)
 
