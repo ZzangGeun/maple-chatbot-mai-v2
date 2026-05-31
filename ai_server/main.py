@@ -21,7 +21,7 @@ from pydantic import BaseModel
 from ai_server.config import settings
 
 
-# hybrid_builder.py가 넥슨 API, Gemini, 로컬 LLM을 조합한 최종 그래프를 제공합니다.
+# main_builder.py가 넥슨 API, Gemini, 로컬 LLM을 조합한 메인 그래프 및 서브 그래프를 제공합니다.
 
 
 logging.basicConfig(level=logging.INFO)
