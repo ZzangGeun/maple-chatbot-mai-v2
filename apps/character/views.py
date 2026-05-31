@@ -23,7 +23,7 @@ async def character_search(request) -> JsonResponse:
     """
     캐릭터 이름을 입력받아 넥슨 API에서 종합 캐릭터 정보를 조회합니다.
 
-    GET /api/character/search/?name={캐릭터명}
+    GET /api/v1/character/search/?name={캐릭터명}
     """
     try:
         character_name = request.GET.get("name", "").strip()

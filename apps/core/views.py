@@ -70,7 +70,7 @@ def home_data(request) -> JsonResponse:
     """
     메인 페이지용 통합 데이터(공지 5건씩 + 랭킹 10건)를 반환합니다.
 
-    GET /api/core/home/data/
+    GET /api/v1/core/home/data/
     """
     empty_response = {
         "notices": {"updates": [], "events": [], "cashshop": []},
@@ -113,7 +113,7 @@ def get_notices_json(request) -> JsonResponse:
     """
     캐시된 Redis에서 공지사항 전체 데이터를 로드합니다.
 
-    GET /api/core/notices/json/
+    GET /api/v1/core/notices/json/
     """
     data = load_notice_data_from_redis()
     return JsonResponse({"status": "success", "data": data}, status=200)
@@ -124,7 +124,7 @@ def get_event_notices(request) -> JsonResponse:
     """
     이벤트 공지사항을 조회합니다.
 
-    GET /api/core/notices/event/
+    GET /api/v1/core/notices/event/
     """
     notice = get_notice_list() or {}
     data = notice.get("notice_event", {}).get("event_notice", [])
@@ -136,7 +136,7 @@ def get_update_notices(request) -> JsonResponse:
     """
     업데이트 공지사항을 조회합니다.
 
-    GET /api/core/notices/update/
+    GET /api/v1/core/notices/update/
     """
     notice = get_notice_list() or {}
     data = notice.get("notice_update", {}).get("update_notice", [])
@@ -148,7 +148,7 @@ def get_cashshop_notices(request) -> JsonResponse:
     """
     캐시샵 공지사항을 조회합니다.
 
-    GET /api/core/notices/cashshop/
+    GET /api/v1/core/notices/cashshop/
     """
     notice = get_notice_list() or {}
     data = notice.get("notice_cashshop", {}).get("cashshop_notice", [])
@@ -165,7 +165,7 @@ def get_ranking_json(request) -> JsonResponse:
     """
     캐시된 Redis에서 랭킹 전체 데이터를 로드합니다.
 
-    GET /api/core/ranking/json/
+    GET /api/v1/core/ranking/json/
     """
     data = load_ranking_data_from_redis()
     return JsonResponse({"status": "success", "data": data}, status=200)
@@ -176,7 +176,7 @@ def get_overall_ranking(request) -> JsonResponse:
     """
     종합 랭킹 상위 50위를 조회합니다.
 
-    GET /api/core/ranking/overall/
+    GET /api/v1/core/ranking/overall/
     """
     ranking = get_ranking_list() or {}
     data = ranking.get("overall_ranking", [])

@@ -53,7 +53,7 @@ class LocalLLMLoader:
                 "text-generation",
                 model=model,
                 tokenizer=tokenizer,
-                max_new_tokens=1024,
+                max_length=1024,
                 do_sample=True,
                 temperature=0.7,
                 top_p=0.9,

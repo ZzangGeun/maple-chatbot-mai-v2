@@ -60,7 +60,7 @@ def get_sessions(request) -> JsonResponse:
     """
     채팅 세션 목록 조회.
 
-    GET /api/chat/sessions/
+    GET /api/v1/chat/sessions/
     """
     if request.user.is_authenticated:
         sessions = ChatSession.objects.filter(user=request.user)
@@ -101,7 +101,7 @@ def create_session(request) -> JsonResponse:
     """
     새로운 채팅 세션 생성.
 
-    POST /api/chat/sessions/create/
+    POST /api/v1/chat/sessions/create/
     """
     user_profile = request.user if request.user.is_authenticated else None
 
@@ -127,7 +127,7 @@ def get_messages(request, session_id: str) -> JsonResponse:
     """
     특정 세션의 메시지 목록 조회.
 
-    GET /api/chat/sessions/<session_id>/messages/
+    GET /api/v1/chat/sessions/<session_id>/messages/
     """
     session = _get_session_or_raise(session_id)
     messages = session.messages.all().order_by("created_at")
@@ -162,7 +162,7 @@ def send_message(request, session_id: str) -> JsonResponse:
     """
     세션에 메시지를 전송하고 AI 답변 수신 (동기).
 
-    POST /api/chat/sessions/<session_id>/send/
+    POST /api/v1/chat/sessions/<session_id>/send/
     """
     session = _get_session_or_raise(session_id)
 
@@ -183,13 +183,13 @@ def send_message(request, session_id: str) -> JsonResponse:
 
 @csrf_exempt
 @require_http_methods(["POST"])
-async def stream_message(request, session_id: str) -> StreamingHttpResponse:
+def stream_message(request, session_id: str) -> StreamingHttpResponse:
     """
     세션에 메시지를 전송하고 AI 서버로부터 스트리밍 응답 수신 (SSE).
 
-    POST /api/chat/sessions/<session_id>/stream/
+    POST /api/v1/chat/sessions/<session_id>/stream/
     """
-    session = await _aget_session_or_raise(session_id)
+    session = _get_session_or_raise(session_id)
 
     try:
         body = json.loads(request.body)
@@ -197,7 +197,7 @@ async def stream_message(request, session_id: str) -> StreamingHttpResponse:
     except (json.JSONDecodeError, ValueError):
         return JsonResponse({"error": "유효하지 않은 요청 형식입니다."}, status=400)
 
-    # 제너레이터로 응답 스트리밍 (백그라운드에서 비동기로 DB 저장됨)
+    # 제너레이터로 응답 스트리밍 (백그라운드에서 DB 저장됨)
     stream_generator = stream_message_generator(session, content)
     
     return StreamingHttpResponse(stream_generator, content_type="text/event-stream")
@@ -209,7 +209,7 @@ def delete_session(request, session_id: str) -> JsonResponse:
     """
     특정 채팅 세션 삭제.
 
-    DELETE /api/chat/sessions/<session_id>/delete/
+    DELETE /api/v1/chat/sessions/<session_id>/delete/
     """
     session = _get_session_or_raise(session_id)
     session.delete()
