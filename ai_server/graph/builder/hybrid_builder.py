@@ -1,104 +1,100 @@
 # ai_server/graph/builder/hybrid_builder.py
 """
-하이브리드 에이전트 그래프 조립 모듈
+하이브리드 에이전트 그래프 조립 모듈 (역할 반전 적용)
 
 그래프 흐름:
   START
     ↓
-  [로컬 LLM] local_route_node (3-way 조건 분기)
+  [Gemini] gemini_route_node (3-way 초고속 조건 분기)
     ↓               ↓                  ↓
- "local_rewrite" "character_lookup" "gemini_chat"
+ "gemini_rewrite" "gemini_intent_extract" "gemini_chat"
     ↓               ↓                  ↓
-  [로컬] rewrite  [로컬] intent       [Gemini]
-    ↓             extract             gemini_chat
-  [로컬] retrieve   ↓                  ↓
-    ↓             [API]              END
-  [Gemini]        nexon_api
-  gemini_rag        ↓
-    ↓             [Gemini]
-   END            gemini_rag (context = API 데이터)
-                    ↓
-                   END
+  [Gemini]        [Gemini]             END
+  rewrite         intent_extract       
+    ↓               ↓
+  [로컬]          [API]
+  retrieve        nexon_api
+    ↓               ↓
+  [로컬]          [로컬]
+  local_generate_rag  local_generate_rag
+    ↓               ↓
+   END             END
 
 설계 의도:
-  - 로컬 LLM  → 라우팅, 엔티티 추출, 쿼리 재작성, RAG 검색 (전처리 에이전트)
+  - Gemini    → 빠른 라우팅, 엔티티 추출, 쿼리 재작성 (전처리 에이전트) 및 단순 대화
   - 넥슨 API  → 실시간 캐릭터 전적 데이터 수집
-  - Gemini    → 최종 고품질 답변 생성 (생성 에이전트)
-  - gemini_generate_rag_node는 RAG 경로와 넥슨 API 경로 양쪽에서 재사용됩니다.
+  - 로컬 LLM  → 깊이 있는 도메인 답변 생성 및 추론 (생성 에이전트)
+  - local_generate_rag_node는 RAG 경로와 넥슨 API 경로 양쪽에서 재사용됩니다.
 """
 
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
+from langgraph.graph.state import CompiledStateGraph
+
 
 from ai_server.graph.nodes.gemini_nodes import (
-    gemini_generate_chat_node,
-    gemini_generate_rag_node,
+    gemini_chat_node,
+    gemini_intent_extract_node,
+    gemini_rewrite_node,
+    gemini_route_node,
 )
 from ai_server.graph.nodes.local_nodes import (
-    local_intent_extract_node,
+    local_generate_rag_node,
     local_retrieve_node,
-    local_rewrite_node,
-    local_route_node,
 )
 from ai_server.graph.nodes.nexon_nodes import nexon_api_tool_node
 from ai_server.graph.state import GraphState
 
 
-def build_hybrid_graph():
-    """
-    로컬 LLM + 넥슨 API + Gemini 하이브리드 StateGraph를 조립하고 컴파일합니다.
-
-    Returns:
-        컴파일된 CompiledGraph 객체 (MemorySaver 체크포인터 포함).
-    """
+def build_hybrid_graph(checkpointer: BaseCheckpointSaver | None = None) -> CompiledStateGraph:
     workflow = StateGraph(GraphState)
 
     # --- 노드 등록 ---
 
-    # [로컬 LLM 노드] RAG 전처리 파이프라인
-    workflow.add_node("local_rewrite", local_rewrite_node)
-    workflow.add_node("local_retrieve", local_retrieve_node)
+    # [Gemini 노드] 전처리 파이프라인
+    workflow.add_node("gemini_rewrite", gemini_rewrite_node)
+    workflow.add_node("gemini_intent_extract", gemini_intent_extract_node)
+    workflow.add_node("gemini_chat", gemini_chat_node)
 
-    # [로컬 LLM 노드] 캐릭터 전적 조회 전처리
-    workflow.add_node("local_intent_extract", local_intent_extract_node)
+    # [로컬 LLM 노드] 검색 및 최종 도메인 답변 생성
+    workflow.add_node("local_retrieve", local_retrieve_node)
+    workflow.add_node("local_generate_rag", local_generate_rag_node)
 
     # [넥슨 API 노드] 실시간 캐릭터 정보 수집
     workflow.add_node("nexon_api", nexon_api_tool_node)
 
-    # [Gemini 노드] 최종 답변 생성 (RAG 경로 + 넥슨 API 경로 공통 재사용)
-    workflow.add_node("gemini_generate_rag", gemini_generate_rag_node)
-    workflow.add_node("gemini_chat", gemini_generate_chat_node)
-
     # --- 엣지 연결 ---
 
-    # START → local_route_node (3-way 조건 분기)
+    # START → gemini_route_node (3-way 조건 분기)
     workflow.add_conditional_edges(
         START,
-        local_route_node,
+        gemini_route_node,
         {
-            "local_rewrite":    "local_rewrite",     # RAG 경로
-            "character_lookup": "local_intent_extract",  # 캐릭터 전적 경로
-            "gemini_chat":      "gemini_chat",        # 일반 대화 경로
+            "gemini_rewrite":        "gemini_rewrite",        # RAG 경로
+            "gemini_intent_extract": "gemini_intent_extract", # 캐릭터 전적 경로
+            "gemini_chat":           "gemini_chat",           # 일반 대화 경로
         },
     )
 
-    # [RAG 경로] 로컬 전처리 → Gemini 최종 생성
-    workflow.add_edge("local_rewrite", "local_retrieve")
-    workflow.add_edge("local_retrieve", "gemini_generate_rag")
+    # [RAG 경로] Gemini 전처리 → 로컬 RAG 답변
+    workflow.add_edge("gemini_rewrite", "local_retrieve")
+    workflow.add_edge("local_retrieve", "local_generate_rag")
 
-    # [캐릭터 전적 경로] 로컬 엔티티 추출 → 넥슨 API 조회 → Gemini 최종 생성
-    # nexon_api_tool_node가 state["context"]를 채우므로 gemini_generate_rag_node를 재사용합니다.
-    workflow.add_edge("local_intent_extract", "nexon_api")
-    workflow.add_edge("nexon_api", "gemini_generate_rag")
+    # [캐릭터 전적 경로] Gemini 전처리 → 넥슨 API 조회 → 로컬 RAG 답변
+    workflow.add_edge("gemini_intent_extract", "nexon_api")
+    workflow.add_edge("nexon_api", "local_generate_rag")
 
     # [공통] 최종 생성 → END
-    workflow.add_edge("gemini_generate_rag", END)
+    workflow.add_edge("local_generate_rag", END)
     workflow.add_edge("gemini_chat", END)
 
     # MemorySaver: thread_id(세션) 단위로 대화 히스토리를 메모리에 유지합니다.
-    memory = MemorySaver()
-    return workflow.compile(checkpointer=memory)
+    if checkpointer is None:
+        checkpointer = MemorySaver()
+    return workflow.compile(checkpointer=checkpointer)
 
 
-# 모듈 import 시 한 번만 그래프를 조립합니다.
+# 모듈 import 시 한 번만 그래프를 조립합니다. (기본 메모리 세이버 사용, 하위 호환용)
 app_graph = build_hybrid_graph()
+

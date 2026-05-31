@@ -38,7 +38,7 @@ def signup(request) -> JsonResponse:
     """
     회원가입 엔드포인트.
 
-    POST /api/accounts/signup/
+    POST /api/v1/accounts/signup/
 
     - Pydantic 스키마에서 1차 유효성 검사(형식, 비밀번호 일치)
     - services.validate_signup_data에서 2차 검사(중복 여부)
@@ -94,7 +94,7 @@ def login_view(request) -> JsonResponse:
     """
     로그인 엔드포인트.
 
-    POST /api/accounts/login/
+    POST /api/v1/accounts/login/
 
     Django의 authenticate()로 자격증명을 확인하고 세션을 생성합니다.
     """
@@ -144,7 +144,7 @@ def logout_view(request) -> JsonResponse:
     """
     로그아웃 엔드포인트.
 
-    POST /api/accounts/logout/
+    POST /api/v1/accounts/logout/
 
     세션 인증이 필요합니다.
     """
@@ -161,7 +161,7 @@ def user_info(request) -> JsonResponse:
     """
     현재 로그인한 사용자 정보 조회 엔드포인트.
 
-    GET /api/accounts/user/
+    GET /api/v1/accounts/user/
     """
     if not request.user.is_authenticated:
         return JsonResponse({"detail": "로그인이 필요합니다."}, status=401)

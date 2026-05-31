@@ -1,7 +1,7 @@
 import client from './client';
 
 export const getHomeData = () => 
-  client.get('/api/core/home/data/');
+  client.get('/api/v1/core/home/data/');
 
 export const searchCharacter = (name) =>
-  client.get('/api/character/search/', { params: { name: name } });
+  client.get('/api/v1/character/search/', { params: { name: name } });

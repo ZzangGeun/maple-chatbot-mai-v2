@@ -12,12 +12,10 @@ Gemini LLM 로더 모듈
 """
 
 import logging
-import os
 
-from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-load_dotenv()
+from ai_server.config import settings
 
 logger = logging.getLogger("GeminiLoader")
 
@@ -36,7 +34,7 @@ class GeminiLoader:
         모듈 import 시 한 번만 호출되므로 API 클라이언트를 매 요청마다 재생성하지 않습니다.
         """
         try:
-            api_key = os.getenv("GOOGLE_API_KEY")
+            api_key = settings.api.google_api_key
             if not api_key:
                 raise ValueError("GOOGLE_API_KEY가 환경변수에 설정되지 않았습니다.")
 

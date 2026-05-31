@@ -18,8 +18,8 @@ from pathlib import Path
 from typing import List, Dict, Any, Tuple
 
 import psycopg
-from dotenv import load_dotenv
 from langchain_core.documents import Document
+from ai_server.config import settings
 # Langfuse 관측 데코레이터 및 컨텍스트 연동 (버전 호환성 및 오프라인 방어막 구성)
 try:
     from langfuse.decorators import observe, langfuse_context
@@ -52,7 +52,7 @@ logger = logging.getLogger("character_batch")
 
 # 프로젝트 루트 디렉토리 계산
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-CHARACTER_DATA_DIR = BASE_DIR / "character_data"
+CHARACTER_DATA_DIR = BASE_DIR / "data" / "character_data"
 ARCHIVE_DIR = CHARACTER_DATA_DIR / "archived"
 
 # 파일명에서 캐릭터 이름과 타임스탬프를 분리하기 위한 패턴입니다.
@@ -232,8 +232,7 @@ def run_character_embedding_batch() -> None:
     """
     logger.info("=== 캐릭터 데이터 배치 임베딩 시작 ===")
     
-    load_dotenv()
-    coll_name = os.getenv("COLLECTION_NAME")
+    coll_name = settings.db.collection_name
     
     try:
         # 공통 DB 유틸리티를 적용해 통일된 postgresql 연결 문자열을 확보합니다.

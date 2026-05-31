@@ -11,12 +11,10 @@ factory는 단순히 올바른 함수를 호출하는 역할만 합니다.
 """
 
 import logging
-import os
 from typing import Any
 
-from dotenv import load_dotenv
+from ai_server.config import settings
 
-load_dotenv()
 logger = logging.getLogger("LLMFactory")
 
 
@@ -30,7 +28,7 @@ def get_llm() -> Any:
     Returns:
         LangChain BaseChatModel 인스턴스.
     """
-    provider = os.getenv("LLM_PROVIDER", "local").lower()
+    provider = settings.model.provider
     logger.info(f"LLM Provider: {provider}")
 
     if provider == "gemini":

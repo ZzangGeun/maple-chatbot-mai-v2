@@ -3,15 +3,15 @@
 core 앱 URL 설정
 
 - serve_react: catch-all React SPA 라우팅 (중앙 urls.py에서 직접 참조)
-- API 엔드포인트: /api/core/ prefix로 include
+- API 엔드포인트: /api/v1/core/ prefix로 include
 
-    GET /api/core/home/data/         — 홈 통합 데이터
-    GET /api/core/notices/json/      — 공지사항 전체 (JSON 캐시)
-    GET /api/core/notices/event/     — 이벤트 공지
-    GET /api/core/notices/update/    — 업데이트 공지
-    GET /api/core/notices/cashshop/  — 캐시샵 공지
-    GET /api/core/ranking/json/      — 랭킹 전체 (JSON 캐시)
-    GET /api/core/ranking/overall/   — 종합 랭킹
+    GET /api/v1/core/home/data/         — 홈 통합 데이터
+    GET /api/v1/core/notices/json/      — 공지사항 전체 (JSON 캐시)
+    GET /api/v1/core/notices/event/     — 이벤트 공지
+    GET /api/v1/core/notices/update/    — 업데이트 공지
+    GET /api/v1/core/notices/cashshop/  — 캐시샵 공지
+    GET /api/v1/core/ranking/json/      — 랭킹 전체 (JSON 캐시)
+    GET /api/v1/core/ranking/overall/   — 종합 랭킹
 """
 
 from django.urls import path

@@ -9,63 +9,24 @@ FastAPI AI 서버 진입점
 
 import json
 import logging
-import re
-
 import os
+import re
 from typing import Any
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 
 # hybrid_builder.py가 넥슨 API, Gemini, 로컬 LLM을 조합한 최종 그래프를 제공합니다.
-from ai_server.graph.builder.hybrid_builder import app_graph
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("AI_Server")
-from contextlib import asynccontextmanager
-from apscheduler.schedulers.background import BackgroundScheduler
-from ai_server.rag.character_batch import run_character_embedding_batch
+from ai_server.lifespan import lifespan
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup: 1. 로컬 LLM 사전 로딩 (Eager Loading)
-    # 첫 질문 시 VRAM 적재 지연으로 인한 타임아웃 방지를 위해 서버 기동 시 즉시 로드합니다.
-    logger.info("🤖 로컬 LLM 모델 사전 적재를 시작합니다...")
-    try:
-        from ai_server.llm.llm_loader import get_local_llm
-        # 최초 1회 싱글톤 로더를 호출해 VRAM에 얹습니다.
-        get_local_llm()
-        logger.info("🤖 로컬 LLM 모델 적재 성공!")
-    except Exception as e:
-        logger.error(f"🤖 로컬 LLM 모델 적재 중 실패 발생: {e}")
-
-    # Startup: 2. 백그라운드 스케줄러를 가동합니다.
-    # 한국 시간대(Asia/Seoul)를 기준으로 새벽 4시에 작동하도록 설정합니다.
-    scheduler = BackgroundScheduler(timezone="Asia/Seoul")
-    scheduler.add_job(
-        run_character_embedding_batch,
-        trigger="cron",
-        hour=4,
-        minute=0,
-        id="character_embedding_job",
-        name="매일 새벽 4시 캐릭터 데이터 pgvector 임베딩 적재"
-    )
-    scheduler.start()
-    logger.info("⏰ 백그라운드 스케줄러가 성공적으로 시작되었습니다. (매일 04:00 실행)")
-    
-    yield
-    
-    # Shutdown: 서비스 종료 시 스케줄러를 안전하게 닫습니다.
-    scheduler.shutdown()
-    logger.info("⏰ 백그라운드 스케줄러가 안전하게 종료되었습니다.")
-
-app = FastAPI(
-    title="MapleStory AI Server (LangGraph)",
-    lifespan=lifespan
-)
+app = FastAPI(title="MapleStory AI Server (LangGraph)", lifespan=lifespan)
 
 
 class QueryRequest(BaseModel):
@@ -75,22 +36,22 @@ class QueryRequest(BaseModel):
     message: str
 
 
-def get_langfuse_handler(session_id: str | None = None, user_id: str | None = None) -> Any | None:
+def get_langfuse_handler() -> Any | None:
     """
     환경 변수가 설정되어 있을 경우 Langfuse CallbackHandler를 반환합니다.
     (설정이 없으면 None 반환)
     """
     try:
         if os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
-            from langfuse.callback import CallbackHandler
-            # 넘겨받은 session_id를 세션 추적 키로 연결합니다.
-            langfuse_handler = CallbackHandler(session_id=session_id, user_id=user_id)
+            from langfuse.langchain import CallbackHandler
+
+            langfuse_handler = CallbackHandler()
             return langfuse_handler
     except ImportError:
         logger.warning("langfuse 패키지가 설치되지 않았습니다. 추적을 비활성화합니다.")
     except Exception as e:
         logger.warning(f"Langfuse 초기화 실패 (추적 비활성화): {e}")
-    
+
     return None
 
 
@@ -118,7 +79,7 @@ def parse_thinking_response(text: str) -> tuple[str, str]:
 
 
 @app.post("/generate")
-async def generate_response(request: QueryRequest) -> dict:
+async def generate_response(request: QueryRequest, raw_request: Request) -> dict:
     """
     동기 방식 AI 답변 생성 엔드포인트.
 
@@ -128,20 +89,23 @@ async def generate_response(request: QueryRequest) -> dict:
     try:
         logger.info(f"요청 수신 (Session: {request.session_id}): {request.message}")
 
-        config = {"configurable": {"thread_id": request.session_id}}
-        
+        config = {
+            "configurable": {"thread_id": request.session_id},
+            "metadata": {"langfuse_session_id": request.session_id},
+        }
+
         # Langfuse 설정
         callbacks = []
-        langfuse_handler = get_langfuse_handler(session_id=request.session_id)
+        langfuse_handler = get_langfuse_handler()
         if langfuse_handler:
             callbacks.append(langfuse_handler)
-            
+
         if callbacks:
             config["callbacks"] = callbacks
 
         input_message = HumanMessage(content=request.message)
 
-        output = await app_graph.ainvoke(
+        output = await raw_request.app.state.graph.ainvoke(
             {"messages": [input_message]},
             config=config,
         )
@@ -160,7 +124,7 @@ async def generate_response(request: QueryRequest) -> dict:
 
 
 @app.post("/stream")
-async def stream_response(request: QueryRequest) -> StreamingResponse:
+async def stream_response(request: QueryRequest, raw_request: Request) -> StreamingResponse:
     """
     SSE(Server-Sent Events) 스트리밍 답변 생성 엔드포인트.
 
@@ -168,16 +132,21 @@ async def stream_response(request: QueryRequest) -> StreamingResponse:
     route/rewrite 등 중간 과정 노드의 출력은 숨깁니다.
     """
     try:
-        logger.info(f"스트리밍 요청 수신 (Session: {request.session_id}): {request.message}")
+        logger.info(
+            f"스트리밍 요청 수신 (Session: {request.session_id}): {request.message}"
+        )
 
-        config = {"configurable": {"thread_id": request.session_id}}
-        
+        config = {
+            "configurable": {"thread_id": request.session_id},
+            "metadata": {"langfuse_session_id": request.session_id},
+        }
+
         # Langfuse 설정
         callbacks = []
-        langfuse_handler = get_langfuse_handler(session_id=request.session_id)
+        langfuse_handler = get_langfuse_handler()
         if langfuse_handler:
             callbacks.append(langfuse_handler)
-            
+
         if callbacks:
             config["callbacks"] = callbacks
 
@@ -185,7 +154,7 @@ async def stream_response(request: QueryRequest) -> StreamingResponse:
 
         async def event_generator():
             try:
-                async for event in app_graph.astream_events(
+                async for event in raw_request.app.state.graph.astream_events(
                     {"messages": [input_message]},
                     config=config,
                     version="v2",
@@ -195,9 +164,9 @@ async def stream_response(request: QueryRequest) -> StreamingResponse:
                     if event_type == "on_chat_model_stream":
                         node_name = event.get("metadata", {}).get("langgraph_node", "")
 
-                        # 하이브리드 그래프의 Gemini 최종 생성 노드에서만 토큰을 전송합니다.
-                        # local_rewrite, local_retrieve 같은 전처리 노드는 스킵합니다.
-                        if node_name in ("gemini_generate_rag", "gemini_chat"):
+                        # 하이브리드 그래프의 최종 생성 노드에서만 토큰을 전송합니다.
+                        # 전처리 노드(라우팅, 쿼리 추출)의 출력은 스킵합니다.
+                        if node_name in ("local_generate_rag", "gemini_chat"):
                             chunk = event["data"]["chunk"]
                             if chunk.content:
                                 payload = {"type": "token", "content": chunk.content}
@@ -217,7 +186,9 @@ async def stream_response(request: QueryRequest) -> StreamingResponse:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"스트리밍 시작 실패: {e}")
-        raise HTTPException(status_code=500, detail="스트리밍 서버 오류가 발생했습니다.")
+        raise HTTPException(
+            status_code=500, detail="스트리밍 서버 오류가 발생했습니다."
+        )
 
 
 if __name__ == "__main__":
