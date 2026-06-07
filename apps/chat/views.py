@@ -13,7 +13,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from apps.chat.models import ChatSession
-from apps.chat.services import send_message_sync, stream_message_generator
+from apps.chat.services import stream_message_generator
 
 logger = logging.getLogger(__name__)
 
