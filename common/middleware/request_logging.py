@@ -35,12 +35,17 @@ class RequestLoggingMiddleware:
         start_time = time.time()
 
         # 요청 시작 로그
+        # 왜 hasattr을 사용하는가: 이 미들웨어가 AuthenticationMiddleware보다
+        # 먼저 실행되면 request.user 속성이 아직 존재하지 않을 수 있습니다.
+        user_display = "anonymous"
+        if hasattr(request, "user"):
+            user_display = getattr(request.user, "username", "anonymous")
         logger.info(
             "[%s] %s %s (user=%s)",
             request_id,
             request.method,
             request.get_full_path(),
-            getattr(request.user, "username", "anonymous"),
+            user_display,
         )
 
         response = self.get_response(request)

@@ -37,6 +37,27 @@ def load_data_from_redis(key: str) -> dict | list | None:
     return None
 
 
+# 도메인별 Redis 캐시 접근 래핑 함수 (views.py에서 import하기 위한 별칭)
+def load_notice_data_from_redis() -> dict | None:
+    """Redis에서 공지사항 캐시 데이터를 불러옵니다."""
+    return load_data_from_redis('cache:notice_list')
+
+
+def load_ranking_data_from_redis() -> dict | None:
+    """Redis에서 랭킹 캐시 데이터를 불러옵니다."""
+    return load_data_from_redis('cache:ranking_list')
+
+
+def save_notice_data_to_redis(data: dict) -> None:
+    """공지사항 데이터를 Redis에 캐싱합니다."""
+    save_data_to_redis('cache:notice_list', data)
+
+
+def save_ranking_data_to_redis(data: dict) -> None:
+    """랭킹 데이터를 Redis에 캐싱합니다."""
+    save_data_to_redis('cache:ranking_list', data)
+
+
 def get_notice_list() -> dict:
     """
     공지사항 데이터를 Nexon API에서 가져와서 Redis에 캐시하고 반환합니다.
