@@ -11,7 +11,7 @@ from langchain_core.runnables import RunnableConfig
 
 from ai_server.graph.state.rag_state import RagState
 from ai_server.llm.gemini_loader import get_gemini_llm
-from ai_server.prompts.templates import PromptTemplate
+from ai_server.prompts import PromptTemplate, get_prompt
 from ai_server.rag.retriever import Retriever
 
 logger = logging.getLogger("RagNodes")
@@ -28,7 +28,7 @@ async def gemini_rewrite_node(state: RagState, config: RunnableConfig = None) ->
     messages = state["messages"]
 
     prompt = ChatPromptTemplate.from_messages([
-        ("system", PromptTemplate.GEMINI_REWRITE_SYSTEM.value),
+        ("system", get_prompt(PromptTemplate.REWRITE_SYSTEM, model="gemini")),
         MessagesPlaceholder(variable_name="messages"),
     ])
 

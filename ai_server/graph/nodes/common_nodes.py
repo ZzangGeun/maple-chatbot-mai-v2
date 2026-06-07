@@ -12,7 +12,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableConfig
 
 from ai_server.llm.llm_loader import get_local_llm
-from ai_server.prompts.templates import PromptTemplate
+from ai_server.prompts import PromptTemplate, get_prompt
 
 logger = logging.getLogger("CommonNodes")
 
@@ -32,8 +32,8 @@ async def local_generate_rag_node(state: dict, config: RunnableConfig = None) ->
     query_log = f" | 쿼리: '{rewritten_query}'" if rewritten_query else ""
     logger.info(f"[LocalGenerateRAG] 답변 생성 시작{query_log} | 컨텍스트 길이: {len(context)}자")
 
-    rag_system = PromptTemplate.LOCAL_RAG_SYSTEM.value
-    rag_human = PromptTemplate.LOCAL_RAG_HUMAN.value
+    rag_system = get_prompt(PromptTemplate.RAG_SYSTEM, model="local")
+    rag_human = get_prompt(PromptTemplate.RAG_HUMAN, model="local")
 
     # ChatML 템플릿 구조
     prompt = ChatPromptTemplate.from_messages([

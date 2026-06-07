@@ -9,7 +9,7 @@ from langchain_core.runnables import RunnableConfig
 from ai_server.graph.state.nexon_state import NexonState
 from ai_server.graph.tools.nexon_api_tool import NexonAPIClient
 from ai_server.llm.gemini_loader import get_gemini_llm
-from ai_server.prompts.templates import PromptTemplate
+from ai_server.prompts import PromptTemplate, get_prompt
 
 logger = logging.getLogger("NexonNodes")
 
@@ -47,7 +47,7 @@ async def gemini_intent_extract_node(state: NexonState, config: RunnableConfig =
     
     question = state["messages"][-1].content
 
-    extract_system = PromptTemplate.GEMINI_INTENT_EXTRACT_SYSTEM.value
+    extract_system = get_prompt(PromptTemplate.INTENT_EXTRACT_SYSTEM, model="gemini")
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", extract_system),

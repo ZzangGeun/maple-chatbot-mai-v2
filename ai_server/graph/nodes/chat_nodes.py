@@ -12,7 +12,7 @@ from langchain_core.runnables import RunnableConfig
 
 from ai_server.graph.state.main_state import MainState
 from ai_server.llm.gemini_loader import get_gemini_llm
-from ai_server.prompts.templates import PromptTemplate
+from ai_server.prompts import PromptTemplate, get_prompt
 
 logger = logging.getLogger("ChatNodes")
 
@@ -23,7 +23,7 @@ async def gemini_chat_node(state: MainState, config: RunnableConfig = None) -> d
     logger.info("[GeminiChat] 일반 대화 답변 생성 시작")
 
     prompt = ChatPromptTemplate.from_messages([
-        ("system", PromptTemplate.GEMINI_CHAT_SYSTEM.value),
+        ("system", get_prompt(PromptTemplate.CHAT_SYSTEM, model="gemini")),
         MessagesPlaceholder(variable_name="messages"),
     ])
 
