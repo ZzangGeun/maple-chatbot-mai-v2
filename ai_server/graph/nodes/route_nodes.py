@@ -12,7 +12,7 @@ from langchain_core.runnables import RunnableConfig
 
 from ai_server.graph.state.main_state import MainState
 from ai_server.llm.gemini_loader import get_gemini_llm
-from ai_server.prompts.templates import PromptTemplate
+from ai_server.prompts import PromptTemplate, get_prompt
 
 logger = logging.getLogger("RouteNodes")
 
@@ -23,7 +23,7 @@ async def gemini_route_node(state: MainState, config: RunnableConfig = None) -> 
     question = state["messages"][-1].content
 
     prompt = ChatPromptTemplate.from_messages([
-        ("system", PromptTemplate.GEMINI_ROUTE_SYSTEM.value),
+        ("system", get_prompt(PromptTemplate.ROUTE_SYSTEM, model="gemini")),
         ("human", "{question}")
     ])
 
