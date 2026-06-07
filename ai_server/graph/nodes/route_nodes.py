@@ -17,7 +17,7 @@ from ai_server.prompts.templates import PromptTemplate
 logger = logging.getLogger("RouteNodes")
 
 
-def gemini_route_node(state: MainState, config: RunnableConfig = None) -> str:
+async def gemini_route_node(state: MainState, config: RunnableConfig = None) -> str:
     """Gemini를 사용한 초고속 라우팅 노드"""
     llm = get_gemini_llm()
     question = state["messages"][-1].content
@@ -28,7 +28,8 @@ def gemini_route_node(state: MainState, config: RunnableConfig = None) -> str:
     ])
 
     chain = prompt | llm | StrOutputParser()
-    decision = chain.invoke({"question": question}, config=config).strip().lower()
+    decision = await chain.ainvoke({"question": question}, config=config)
+    decision = decision.strip().lower()
 
     logger.info(f"[GeminiRoute] 분류 결과: '{decision}' | 질문: {question[:50]}...")
 

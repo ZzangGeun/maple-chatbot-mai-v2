@@ -99,12 +99,13 @@ class Retriever:
                 logger.error(f"Fallback 로드도 실패: {fallback_error}")
                 return []
 
-    def retrieve(self, query: str) -> List[Document]:
+    def retrieve(self, query: str, config: Optional[dict] = None) -> List[Document]:
         """
         문서 검색을 실행합니다.
 
         Args:
             query: 검색할 질문 문자열.
+            config: 선택적 LangChain 설정 (콜백 등).
 
         Returns:
             검색된 Document 리스트.
@@ -115,7 +116,7 @@ class Retriever:
 
         logger.info(f"🔍 검색 요청 (Hybrid): {query}")
         try:
-            docs = self.retriever.invoke(query)
+            docs = self.retriever.invoke(query, config=config)
             for i, doc in enumerate(docs):
                 source = doc.metadata.get("source", "unknown")
                 title = doc.metadata.get("title", "No Title")

@@ -22,7 +22,7 @@ MAX_DOC_CHARS = 1200
 MAX_CONTEXT_CHARS = 4000
 
 
-def gemini_rewrite_node(state: RagState, config: RunnableConfig = None) -> dict:
+async def gemini_rewrite_node(state: RagState, config: RunnableConfig = None) -> dict:
     """Gemini를 사용한 초고속 쿼리 재작성 노드"""
     llm = get_gemini_llm()
     messages = state["messages"]
@@ -33,16 +33,17 @@ def gemini_rewrite_node(state: RagState, config: RunnableConfig = None) -> dict:
     ])
 
     chain = prompt | llm | StrOutputParser()
-    new_query = chain.invoke({"messages": messages}, config=config).strip()
+    new_query = await chain.ainvoke({"messages": messages}, config=config)
+    new_query = new_query.strip()
 
     logger.info(f"[GeminiRewrite] 재작성된 쿼리: {new_query}")
     return {"query": new_query}
 
 
-def local_retrieve_node(state: RagState) -> dict:
+async def local_retrieve_node(state: RagState, config: RunnableConfig = None) -> dict:
     """재작성된 쿼리로 RAG 벡터스토어에서 관련 문서를 검색합니다."""
     query = state["query"]
-    docs = _retriever_instance.retriever.invoke(query)
+    docs = await _retriever_instance.retriever.ainvoke(query, config=config)
 
     context_parts = []
     for i, doc in enumerate(docs, 1):

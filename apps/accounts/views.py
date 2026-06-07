@@ -15,6 +15,7 @@ from django.contrib.auth.models import User
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
+from asgiref.sync import sync_to_async
 from pydantic import ValidationError
 
 from apps.accounts.models import UserProfile
@@ -85,13 +86,13 @@ async def signup(request) -> JsonResponse:
     except Exception as e:
         logger.error(f"회원가입 처리 중 오류: {e}")
         return JsonResponse(
-            {"detail": "회원가입 중 서버 오류가 발생했습니다."}, status=400
+            {"detail": "회원가입 중 서버 오류가 발생했습니다."}, status=500
         )
 
 
 @csrf_exempt
 @require_http_methods(["POST"])
-def login_view(request) -> JsonResponse:
+async def login_view(request) -> JsonResponse:
     """
     로그인 엔드포인트.
 
@@ -110,7 +111,8 @@ def login_view(request) -> JsonResponse:
         )
 
     # 1. 아이디 존재 여부 검사 (보안상 권장되지는 않으나 명확한 오류 피드백을 위해 분리)
-    if not User.objects.filter(username=data.username).exists():
+    user_exists = await User.objects.filter(username=data.username).aexists()
+    if not user_exists:
         logger.warning(f"로그인 실패 (존재하지 않는 아이디): {data.username}")
         return JsonResponse(
             {"detail": "존재하지 않는 아이디입니다."}, status=401
@@ -120,7 +122,7 @@ def login_view(request) -> JsonResponse:
         "username": data.username,
         "password": data.password,
     }
-    user = authenticate(**credentials)
+    user = await sync_to_async(authenticate)(**credentials)
 
     if user is None:
         logger.warning(f"로그인 실패 (비밀번호 불일치): {data.username}")
@@ -131,9 +133,9 @@ def login_view(request) -> JsonResponse:
     if not user.is_active:
         return JsonResponse({"detail": "비활성화된 계정입니다."}, status=401)
 
-    login(request, user)
+    await sync_to_async(login)(request, user)
 
-    profile = UserProfile.objects.get_by_user_or_none(user)
+    profile = await sync_to_async(UserProfile.objects.get_by_user_or_none)(user)
     maple_nickname = profile.maple_nickname if profile else None
 
     logger.info(f"로그인 성공: {data.username}")

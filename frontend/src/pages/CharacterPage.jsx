@@ -21,15 +21,17 @@ const CharacterPage = () => {
 
         try {
             const response = await characterApi.searchCharacter(searchName.trim());
-            if (response.data.status === 'success') {
+            // 공통 응답 포맷인 response.data.success 대조
+            if (response.data.success) {
                 setCharacterData(response.data.data);
             } else {
-                setError(response.data.error || '캐릭터를 찾을 수 없습니다.');
+                setError(response.data.error?.message || '캐릭터를 찾을 수 없습니다.');
             }
         } catch (err) {
             console.error('Search error:', err);
-            if (err.response?.data?.error) {
-                setError(err.response.data.error);
+            // 공통 에러 포맷인 err.response.data.error.message 바인딩
+            if (err.response?.data?.error?.message) {
+                setError(err.response.data.error.message);
             } else {
                 setError('캐릭터 검색 중 오류가 발생했습니다.');
             }

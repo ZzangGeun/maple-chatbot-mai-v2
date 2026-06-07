@@ -15,7 +15,7 @@ from common.exceptions.chat import InvalidSessionId, SessionNotFound
 class ChatSessionQuerySet(models.QuerySet):
     """채팅 세션에 특화된 커스텀 QuerySet.
 
-    비즈니스 레이어 및 뷰에서 데이터 조회 및 예외 처리를 직접 반복하지 않도록 
+    비즈니스 레이어 및 뷰에서 데이터 조회 및 예외 처리를 직접 반복하지 않도록
     캡슐화하여 장고스러운 방식으로 DB 접근 계층을 격리합니다.
     """
 
@@ -71,56 +71,127 @@ class ChatSessionQuerySet(models.QuerySet):
 
 
 class ChatSession(models.Model):
-    """
-    하나의 대화방 만들기
-    """
+    """하나의 대화방"""
     session_id = models.UUIDField(
-        primary_key = True,
-        default = uuid.uuid4,
-        editable = False,
-        verbose_name = "세션 ID"
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+        verbose_name="세션 ID"
     )
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete = models.CASCADE,
-        related_name = "chat_sessions",
-        null = True,
-        blank = True,
-        verbose_name = "사용자"
+        on_delete=models.CASCADE,
+        related_name="chat_sessions",
+        null=True,
+        blank=True,
+        db_index=True,
+        verbose_name="사용자"
     )
 
-    created_at = models.DateTimeField(auto_now_add = True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name="생성 일시")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="수정 일시")
 
-    # 커스텀 쿼리셋을 기본 매니저로 지정
     objects = ChatSessionQuerySet.as_manager()
+
+    class Meta:
+        verbose_name = "채팅 세션"
+        verbose_name_plural = "채팅 세션 목록"
+        indexes = [
+            models.Index(fields=['user', '-created_at']),
+        ]
 
     def __str__(self):
         return f"{str(self.session_id)[:8]}"
 
+
 class ChatMessage(models.Model):
-    """
-    세션 내 메세지 저장
-    """
-    session_id = models.ForeignKey(
+    """채팅 메시지 (정규화된 구조: 각 메시지는 role과 content를 가짐)"""
+    ROLE_CHOICES = [
+        ('user', 'User'),
+        ('assistant', 'Assistant'),
+        ('system', 'System'),
+    ]
+
+    session = models.ForeignKey(
         ChatSession,
-        on_delete = models.CASCADE,
-        related_name = "messages",
-        verbose_name = "세션"
+        on_delete=models.CASCADE,
+        related_name="messages",
+        verbose_name="세션"
     )
 
-    user_message =models.TextField()
-    ai_response = models.TextField()
+    role = models.CharField(
+        max_length=20,
+        choices=ROLE_CHOICES,
+        default='assistant',
+        db_index=True,
+        verbose_name="역할"
+    )
 
-    thinking = models.TextField(blank=True, null=True)
+    content = models.TextField(verbose_name="메시지 내용", null=True, blank=True)
 
-    response_time = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name="생성 일시")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="수정 일시")
 
-    created_at = models.DateTimeField(auto_now_add = True)
+    class Meta:
+        verbose_name = "채팅 메시지"
+        verbose_name_plural = "채팅 메시지 목록"
+        indexes = [
+            models.Index(fields=['session', 'created_at']),
+            models.Index(fields=['session', 'role']),
+        ]
 
-    def __str__(self) -> str:
-        # ForeignKey 필드명이 session_id이므로 self.session_id로 접근합니다.
-        return f"Msg {self.id} in {str(self.session_id.session_id)[:8]}"
-    
+    def __str__(self):
+        return f"{self.role}: {self.content[:50]}"
 
+
+class MessageMetadata(models.Model):
+    """메시지 메타데이터 (성능, 사고 과정, 모델 정보 등)"""
+    message = models.OneToOneField(
+        ChatMessage,
+        on_delete=models.CASCADE,
+        related_name="metadata",
+        verbose_name="메시지"
+    )
+
+    thinking = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="LLM 사고 과정",
+        help_text="Qwen Thinking 모델 사고 과정"
+    )
+
+    response_time_ms = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name="응답 시간(ms)"
+    )
+
+    model_name = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name="사용 모델명"
+    )
+
+    tokens_used = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name="토큰 사용량"
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        db_index=True,
+        verbose_name="생성 일시"
+    )
+
+    class Meta:
+        verbose_name = "메시지 메타데이터"
+        verbose_name_plural = "메시지 메타데이터 목록"
+        indexes = [
+            models.Index(fields=['message']),
+        ]
+
+    def __str__(self):
+        return f"Metadata for {self.message}"
 

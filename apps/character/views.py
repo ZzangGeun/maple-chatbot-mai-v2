@@ -16,6 +16,8 @@ from apps.character.nexon import get_character_data
 from apps.character.services import generate_verification_code, verify_and_link_character
 
 
+from common.schemas.response import ApiResponse
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,7 +33,10 @@ async def character_search(request) -> JsonResponse:
         character_name = request.GET.get("name", "").strip()
 
         if not character_name:
-            return JsonResponse({"error": "캐릭터 이름을 입력해주세요.", "status": "error"}, status=400)
+            return JsonResponse(
+                ApiResponse.fail("캐릭터 이름을 입력해주세요.", code="NAME_REQUIRED").to_dict(),
+                status=400,
+            )
 
         logger.info(f"캐릭터 정보 조회 요청: {character_name}")
 
@@ -39,20 +44,24 @@ async def character_search(request) -> JsonResponse:
 
         if not character_info:
             return JsonResponse(
-                {"error": "캐릭터 정보를 찾을 수 없거나 가져오는 데 실패했습니다.", "status": "error"},
+                ApiResponse.fail("캐릭터 정보를 찾을 수 없거나 가져오는 데 실패했습니다.", code="CHARACTER_NOT_FOUND").to_dict(),
                 status=404,
             )
 
         logger.info(f"캐릭터 정보 조회 성공: {character_name}")
 
+        # 공통 성공 스키마(success: True, data: character_info) 반환
         return JsonResponse(
-            {"message": "캐릭터 정보 조회 성공", "data": character_info, "status": "success"},
+            ApiResponse.ok(data=character_info).to_dict(),
             status=200,
         )
 
     except Exception as e:
         logger.error(f"캐릭터 정보 조회 오류: {e!s}")
-        return JsonResponse({"error": "서버 오류가 발생했습니다.", "status": "error"}, status=500)
+        return JsonResponse(
+            ApiResponse.fail("서버 오류가 발생했습니다.", code="SERVER_ERROR").to_dict(),
+            status=500,
+        )
 
 
 @csrf_exempt

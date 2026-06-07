@@ -18,6 +18,7 @@ from apps.character.nexon.client import (
     fetch_account_character_list,
     fetch_all_character_info,
     fetch_character_ocid,
+    _build_headers
 )
 from apps.character.nexon.constants import CACHE_DURATION, NEXON_API_KEY
 from apps.character.nexon.extractors import all_info_extract
@@ -25,13 +26,7 @@ from apps.character.nexon.extractors import all_info_extract
 logger = logging.getLogger(__name__)
 
 
-def _build_headers(api_key: str) -> dict:
-    """넥슨 API 요청 헤더를 생성합니다."""
-    return {
-        "x-nxopen-api-key": api_key.strip(),
-        "Content-Type": "application/json",
-        "User-Agent": "MAI-Help-You/1.0",
-    }
+
 
 
 def save_character_data_to_json(

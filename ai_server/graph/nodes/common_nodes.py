@@ -17,7 +17,7 @@ from ai_server.prompts.templates import PromptTemplate
 logger = logging.getLogger("CommonNodes")
 
 
-def local_generate_rag_node(state: dict, config: RunnableConfig = None) -> dict:
+async def local_generate_rag_node(state: dict, config: RunnableConfig = None) -> dict:
     """
     로컬 LLM (Qwen)을 사용하여 최종 RAG 또는 API 기반 답변을 생성합니다.
     검색된 문서(또는 API 결괏값)를 기반으로 <think> 추론 과정을 거칩니다.
@@ -44,7 +44,7 @@ def local_generate_rag_node(state: dict, config: RunnableConfig = None) -> dict:
 
     chain = prompt | llm | StrOutputParser()
     
-    response = chain.invoke(
+    response = await chain.ainvoke(
         {"context": context, "messages": state["messages"]},
         config=config
     )

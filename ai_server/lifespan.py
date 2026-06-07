@@ -14,7 +14,6 @@ Shutdown 핸들러:
   - Scheduler   : APScheduler를 안전하게 종료합니다.
 """
 
-import asyncio
 import inspect
 import logging
 import os
@@ -24,6 +23,8 @@ from typing import Any, Awaitable, Union
 
 from fastapi import FastAPI
 from langgraph.checkpoint.redis.aio import AsyncRedisSaver
+
+from ai_server.common import observability
 from ai_server.graph.builder.main_builder import build_main_graph
 
 logger = logging.getLogger("AI_Server_Lifespan")
@@ -45,41 +46,19 @@ _scheduler = None
 def _local_llm_startup() -> None:
     """로컬 LLM(Qwen)을 VRAM에 적재합니다."""
     from ai_server.llm.llm_loader import get_local_llm
+
     get_local_llm()
-
-
-async def _llm_warmup_startup() -> None:
-    """
-    더미 추론을 실행하여 CUDA 컨텍스트와 파이프라인을 미리 활성화합니다.
-
-    Thinking 모델은 max_new_tokens까지 토큰을 생성할 수 있으므로
-    30초 타임아웃을 설정하여 서버 시작을 보장합니다.
-    별도 스레드에서 실행하여 이벤트 루프 블로킹을 방지합니다.
-    """
-    from ai_server.llm.llm_loader import get_local_llm
-
-    local_llm = get_local_llm()
-    try:
-        await asyncio.wait_for(
-            asyncio.to_thread(local_llm.invoke, "안녕"),
-            timeout=30,
-        )
-    except asyncio.TimeoutError:
-        # 타임아웃은 치명적이지 않음 — 첫 요청 시 약간의 지연만 발생합니다.
-        logger.warning(
-            "LLM 웜업이 30초를 초과하여 건너뛰었습니다. "
-            "첫 요청 시 약간의 지연이 발생할 수 있습니다."
-        )
 
 
 def _scheduler_startup() -> None:
     """캐릭터 데이터 배치 임베딩 스케줄러를 가동합니다."""
     global _scheduler
 
-    from apscheduler.schedulers.background import BackgroundScheduler
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
     from ai_server.rag.character_batch import run_character_embedding_batch
 
-    _scheduler = BackgroundScheduler(timezone="Asia/Seoul")
+    _scheduler = AsyncIOScheduler(timezone="Asia/Seoul")
     _scheduler.add_job(
         run_character_embedding_batch,
         trigger="cron",
@@ -100,19 +79,30 @@ def _scheduler_shutdown() -> None:
         _scheduler = None
 
 
+def _observability_startup() -> None:
+    """옵저버빌리티 모니터링 SDK를 연결 및 시작합니다."""
+    observability.startup()
+
+
+def _observability_shutdown() -> None:
+    """옵저버빌리티 클라이언트 종료 및 남아있는 큐 데이터를 전송합니다."""
+    observability.shutdown()
+
+
 # ---------------------------------------------------------------------------
 # 핸들러 등록 (이름, 함수, critical 여부)
 # critical=True  : 실패 시 앱 기동을 중단합니다.
 # critical=False : 실패해도 경고만 남기고 나머지 초기화를 계속합니다.
 # ---------------------------------------------------------------------------
 _STARTUP_HANDLERS: list[tuple[str, _HandlerFn, bool]] = [
-    ("LocalLLM", _local_llm_startup, True),
-    ("LLMWarmup", _llm_warmup_startup, False),
+    ("LocalLLM", _local_llm_startup, False),
     ("Scheduler", _scheduler_startup, False),
+    ("Observability", _observability_startup, False),
 ]
 
 _SHUTDOWN_HANDLERS: list[tuple[str, _HandlerFn]] = [
     ("Scheduler", _scheduler_shutdown),
+    ("Observability", _observability_shutdown),
 ]
 
 
@@ -140,9 +130,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             yield
             await _shutdown()
     except Exception as e:
-        logger.critical("Redis Checkpointer 또는 애플리케이션 초기화 중 치명적 에러 발생: %s", e, exc_info=True)
+        logger.critical(
+            "Redis Checkpointer 또는 애플리케이션 초기화 중 치명적 에러 발생: %s",
+            e,
+            exc_info=True,
+        )
         raise
-
 
 
 async def _startup() -> None:
