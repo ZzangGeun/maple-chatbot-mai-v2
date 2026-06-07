@@ -38,24 +38,24 @@ class QueryRequest(BaseModel):
     message: str
 
 
-def get_langfuse_handler() -> Any | None:
-    """
-    환경 변수가 설정되어 있을 경우 Langfuse CallbackHandler를 반환합니다.
-    (설정이 없으면 None 반환)
-    """
-    try:
-        if os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
-            from langfuse.langchain import CallbackHandler
+from ai_server.common.observability import get_langfuse_callback
 
-            langfuse_handler = CallbackHandler()
-            return langfuse_handler
-    except ImportError:
-        logger.warning("langfuse 패키지가 설치되지 않았습니다. 추적을 비활성화합니다.")
-    except Exception as e:
-        logger.warning(f"Langfuse 초기화 실패 (추적 비활성화): {e}")
-
-    return None
-
+def _build_langchain_config(session_id: str | None = None) -> dict:
+    """Langchain 호출 시 공통 설정을 생성합니다."""
+    config = {}
+    if session_id:
+        config["configurable"] = {"thread_id": session_id}
+        config["metadata"] = {"langfuse_session_id": session_id}
+    
+    callbacks = []
+    langfuse_handler = get_langfuse_callback()
+    if langfuse_handler:
+        callbacks.append(langfuse_handler)
+        
+    if callbacks:
+        config["callbacks"] = callbacks
+        
+    return config
 
 def parse_thinking_response(text: str) -> tuple[str, str]:
     """
@@ -91,19 +91,7 @@ async def generate_response(request: QueryRequest, raw_request: Request) -> dict
     try:
         logger.info(f"요청 수신 (Session: {request.session_id}): {request.message}")
 
-        config = {
-            "configurable": {"thread_id": request.session_id},
-            "metadata": {"langfuse_session_id": request.session_id},
-        }
-
-        # Langfuse 설정
-        callbacks = []
-        langfuse_handler = get_langfuse_handler()
-        if langfuse_handler:
-            callbacks.append(langfuse_handler)
-
-        if callbacks:
-            config["callbacks"] = callbacks
+        config = _build_langchain_config(request.session_id)
 
         input_message = HumanMessage(content=request.message)
 
@@ -140,19 +128,7 @@ async def stream_response(
             f"스트리밍 요청 수신 (Session: {request.session_id}): {request.message}"
         )
 
-        config = {
-            "configurable": {"thread_id": request.session_id},
-            "metadata": {"langfuse_session_id": request.session_id},
-        }
-
-        # Langfuse 설정
-        callbacks = []
-        langfuse_handler = get_langfuse_handler()
-        if langfuse_handler:
-            callbacks.append(langfuse_handler)
-
-        if callbacks:
-            config["callbacks"] = callbacks
+        config = _build_langchain_config(request.session_id)
 
         input_message = HumanMessage(content=request.message)
 
@@ -178,7 +154,7 @@ async def stream_response(
 
             except Exception as e:
                 logger.error(f"스트리밍 중 에러: {e}")
-                payload = {"type": "error", "content": str(e)}
+                payload = {"type": "error", "content": "내부 서버 오류가 발생했습니다."}
                 yield f"data: {json.dumps(payload)}\n\n"
 
             yield "data: [DONE]\n\n"
@@ -221,7 +197,9 @@ async def single_rag_query(request: SingleQueryRequest):
         from ai_server.rag.retriever import Retriever
 
         retriever = Retriever(k=request.top_k)
-        docs = retriever.retrieve(request.query)
+        config = _build_langchain_config()
+            
+        docs = retriever.retrieve(request.query, config={"callbacks": config["callbacks"]} if "callbacks" in config else None)
 
         # 1. 검색 문서들로부터 컨텍스트 추출
         context = "\n\n".join([doc.page_content for doc in docs])
@@ -238,7 +216,7 @@ async def single_rag_query(request: SingleQueryRequest):
 
         # 3. LLM 비동기 추론 실행
         llm = get_llm()
-        response = await llm.ainvoke(prompt)
+        response = await llm.ainvoke(prompt, config={"callbacks": config["callbacks"]} if "callbacks" in config else None)
 
         if hasattr(response, "content"):
             answer = response.content
@@ -268,7 +246,7 @@ async def single_rag_query(request: SingleQueryRequest):
         logger.error(f"일회성 RAG 쿼리 처리 실패: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"RAG 질의응답 중 내부 오류가 발생했습니다: {str(e)}",
+            detail="RAG 질의응답 중 내부 오류가 발생했습니다.",
         )
 
 
@@ -326,9 +304,8 @@ async def trigger_embedding_sync(
     관리자 전용 토큰을 검증한 뒤, 백그라운드 태스크로 벡터 임베딩 갱신 파이프라인을 작동시킵니다.
     """
     if not authorization or not authorization.startswith("Bearer "):
-        logger.warning(
-            "관리자 인증 토큰 누락. 개발 및 디버깅을 위해 태스크는 강제 실행됩니다."
-        )
+        logger.warning("관리자 인증 토큰이 누락되었습니다.")
+        raise HTTPException(status_code=401, detail="인증이 필요합니다.")
 
     try:
         from ai_server.rag.character_batch import run_character_embedding_batch

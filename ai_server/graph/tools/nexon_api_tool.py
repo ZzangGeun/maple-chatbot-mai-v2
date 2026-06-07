@@ -30,8 +30,10 @@ from ai_server.config import settings
 
 logger = logging.getLogger("NexonAPIClient")
 
+from common.constants.api import NEXON_BASE_URL
+
 # 넥슨 Open API 베이스 URL
-_BASE_URL = "https://open.api.nexon.com/maplestory/v1"
+_BASE_URL = NEXON_BASE_URL
 
 
 class NexonAPIClient:
@@ -56,6 +58,15 @@ class NexonAPIClient:
     # 내부 유틸
     # ------------------------------------------------------------------
 
+    async def get_session(self) -> aiohttp.ClientSession:
+        if not hasattr(self, "_session") or self._session is None or self._session.closed:
+            self._session = aiohttp.ClientSession(headers=self._headers)
+        return self._session
+
+    async def close(self) -> None:
+        if hasattr(self, "_session") and self._session and not self._session.closed:
+            await self._session.close()
+
     async def _get(self, endpoint: str, params: dict[str, Any] | None = None) -> dict:
         """
         GET 요청을 비동기로 수행합니다.
@@ -71,19 +82,19 @@ class NexonAPIClient:
             aiohttp.ClientResponseError: 4xx/5xx 응답 시.
         """
         url = f"{_BASE_URL}{endpoint}"
-        async with aiohttp.ClientSession(headers=self._headers) as session:
-            async with session.get(url, params=params) as response:
-                # 429(Rate Limit), 500(서버 오류) 등을 명시적으로 처리합니다.
-                if response.status == 429:
-                    logger.warning("넥슨 API Rate Limit 초과. 잠시 후 재시도 하세요.")
-                    raise aiohttp.ClientResponseError(
-                        response.request_info,
-                        response.history,
-                        status=429,
-                        message="Too Many Requests",
-                    )
-                response.raise_for_status()
-                return await response.json()
+        session = await self.get_session()
+        async with session.get(url, params=params) as response:
+            # 429(Rate Limit), 500(서버 오류) 등을 명시적으로 처리합니다.
+            if response.status == 429:
+                logger.warning("넥슨 API Rate Limit 초과. 잠시 후 재시도 하세요.")
+                raise aiohttp.ClientResponseError(
+                    response.request_info,
+                    response.history,
+                    status=429,
+                    message="Too Many Requests",
+                )
+            response.raise_for_status()
+            return await response.json()
 
     # ------------------------------------------------------------------
     # 공개 API 메서드

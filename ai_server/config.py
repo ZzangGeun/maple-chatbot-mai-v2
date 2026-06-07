@@ -55,6 +55,7 @@ class ApiSettings(BaseModel):
 
 class LangfuseSettings(BaseModel):
     """Langfuse 모니터링 설정."""
+    enabled: bool = Field(default_factory=lambda: os.getenv("LANGFUSE_ENABLED", "False").lower() in ("true", "1", "yes"))
     secret_key: str | None = Field(default_factory=lambda: os.getenv("LANGFUSE_SECRET_KEY"))
     public_key: str | None = Field(default_factory=lambda: os.getenv("LANGFUSE_PUBLIC_KEY"))
     base_url: str = Field(default_factory=lambda: os.getenv("LANGFUSE_BASE_URL", "https://cloud.langfuse.com"))
@@ -62,8 +63,8 @@ class LangfuseSettings(BaseModel):
 
 class Settings(BaseModel):
     """전체 설정 통합 객체."""
-    secret_key: str = Field(default_factory=lambda: os.getenv("SECRET_KEY", "temporary-secret-key"))
-    debug: bool = Field(default_factory=lambda: os.getenv("DEBUG", "True").lower() in ("true", "1", "yes"))
+    secret_key: str = Field(default_factory=lambda: os.environ["SECRET_KEY"])
+    debug: bool = Field(default_factory=lambda: os.getenv("DEBUG", "False").lower() in ("true", "1", "yes"))
     allowed_hosts: list[str] = Field(default_factory=lambda: [h.strip() for h in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")])
     
     redis_url: str = Field(default_factory=lambda: os.getenv("REDIS_URL", "redis://localhost:6379/0"))

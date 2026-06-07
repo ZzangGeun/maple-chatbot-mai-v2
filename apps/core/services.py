@@ -3,6 +3,7 @@ import logging
 import json
 import os
 from datetime import datetime, timedelta
+from asgiref.sync import async_to_sync
 from common.utils.api_client import get_api_data
 from bs4 import BeautifulSoup
 import time
@@ -16,25 +17,44 @@ redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 
 CACHE_DURATION = 3600  # 캐시 유효 기간 설정 (초 단위: 1시간)
 
+def save_data_to_redis(key: str, data: dict | list) -> None:
+    """Redis에 데이터를 캐싱하는 제네릭 함수"""
+    try:
+        redis_client.setex(key, CACHE_DURATION, json.dumps(data, ensure_ascii=False))
+        logger.info(f"데이터가 Redis에 캐시되었습니다: {key}")
+    except Exception as e:
+        logger.error(f"Redis 데이터 저장 중 오류 발생 ({key}): {e}")
+
+
+def load_data_from_redis(key: str) -> dict | list | None:
+    """Redis에서 캐싱된 데이터를 불러오는 제네릭 함수"""
+    try:
+        data = redis_client.get(key)
+        if data:
+            return json.loads(data)
+    except Exception as e:
+        logger.error(f"Redis 데이터 로드 중 오류 발생 ({key}): {e}")
+    return None
+
+
 def get_notice_list() -> dict:
     """
     공지사항 데이터를 Nexon API에서 가져와서 Redis에 캐시하고 반환합니다.
     캐시가 있고 최신이면(1시간 이내) API 호출 없이 캐시 데이터를 반환합니다.
-
-    Returns:
-        dict: 카테고리별 공지사항 데이터. 키: notice_general, notice_event 등
     """
-    # 캐시 확인
-    cached_data = load_notice_data_from_redis()
+    cache_key = 'cache:notice_list'
+    cached_data = load_data_from_redis(cache_key)
     if cached_data:
         logger.info("Redis에 캐시된 공지사항 데이터를 사용합니다.")
         return cached_data
 
-    # API 호출
-    notice_general = get_api_data("/notice")
-    notice_event = get_api_data("/notice-event")
-    notice_cashshop = get_api_data("/notice-cashshop")
-    notice_update = get_api_data("/notice-update")
+    # 비동기로 변경된 get_api_data를 동기 환경에서 호출
+    _get_api_data = async_to_sync(get_api_data)
+
+    notice_general = _get_api_data("/notice")
+    notice_event = _get_api_data("/notice-event")
+    notice_cashshop = _get_api_data("/notice-cashshop")
+    notice_update = _get_api_data("/notice-update")
 
     notice_data = {
         "notice_general": notice_general,
@@ -43,72 +63,42 @@ def get_notice_list() -> dict:
         "notice_update": notice_update
     }
     
-    # Redis에 캐시 저장
-    save_notice_data_to_redis(notice_data)
+    save_data_to_redis(cache_key, notice_data)
 
     return notice_data
 
 
-def save_notice_data_to_redis(notice_data: dict) -> None:
+def get_ranking_list() -> dict:
     """
-    공지사항 데이터를 Redis에 캐시로 저장합니다.
-
-    Args:
-        notice_data: 저장할 공지사항 데이터
+    랭킹 데이터를 Nexon API에서 가져와서 Redis에 캐시하고 반환합니다.
+    상위 50위까지만 저장합니다.
     """
-    try:
-        redis_client.setex('cache:notice_list', CACHE_DURATION, json.dumps(notice_data, ensure_ascii=False))
-        logger.info("공지사항 데이터가 Redis에 캐시되었습니다.")
-    except Exception as e:
-        logger.error(f"Redis 공지사항 데이터 저장 중 오류 발생: {e}")
+    cache_key = 'cache:ranking_list'
+    cached_data = load_data_from_redis(cache_key)
+    if cached_data:
+        logger.info("Redis에 캐시된 랭킹 데이터를 사용합니다.")
+        return cached_data
 
-
-def load_notice_data_from_redis() -> dict:
-    """
-    Redis에서 공지사항 캐시 데이터를 로드합니다.
-
-    Returns:
-        dict: 로드된 공지사항 데이터. 없거나 오류 시 빈 딕셔너리 반환
-    """
-    try:
-        data = redis_client.get('cache:notice_list')
-        if data:
-            return json.loads(data)
-    except Exception as e:
-        logger.error(f"Redis 공지사항 데이터 로드 중 오류 발생: {e}")
+    _get_api_data = async_to_sync(get_api_data)
+    overall_ranking = _get_api_data("/ranking/overall")
     
-    return {}
-
-
-def save_ranking_data_to_redis(ranking_data: dict) -> None:
-    """
-    랭킹 데이터를 Redis에 캐시로 저장합니다.
-
-    Args:
-        ranking_data: 저장할 랭킹 데이터
-    """
-    try:
-        redis_client.setex('cache:ranking_list', CACHE_DURATION, json.dumps(ranking_data, ensure_ascii=False))
-        logger.info("랭킹 데이터가 Redis에 캐시되었습니다.")
-    except Exception as e:
-        logger.error(f"Redis 랭킹 데이터 저장 중 오류 발생: {e}")
-
-
-def load_ranking_data_from_redis() -> dict:
-    """
-    Redis에서 랭킹 캐시 데이터를 로드합니다.
-
-    Returns:
-        dict: 로드된 랭킹 데이터. 없거나 오류 시 빈 딕셔너리 반환
-    """
-    try:
-        data = redis_client.get('cache:ranking_list')
-        if data:
-            return json.loads(data)
-    except Exception as e:
-        logger.error(f"Redis 랭킹 데이터 로드 중 오류 발생: {e}")
+    # JSON 구조: overall_ranking -> ranking 배열
+    ranking_list = []
+    if overall_ranking and isinstance(overall_ranking, dict):
+        ranking_list = overall_ranking.get('ranking', [])
+    elif isinstance(overall_ranking, list):
+        ranking_list = overall_ranking
     
-    return {}
+    # 상위 50위까지만 저장
+    ranking_list = ranking_list[:50] if ranking_list else []
+    
+    ranking_data = {
+        "overall_ranking": ranking_list
+    }
+    
+    save_data_to_redis(cache_key, ranking_data)
+    
+    return ranking_data
 
 
 def get_ranking_list() -> dict:
@@ -159,7 +149,8 @@ def get_notice_detail(endpoint: str, notice_id: int) -> str:
     """
     try:
         # endpoint 예: /notice/detail, /notice-event/detail 등
-        detail_data = get_api_data(endpoint, params={"notice_id": notice_id})
+        _get_api_data = async_to_sync(get_api_data)
+        detail_data = _get_api_data(endpoint, params={"notice_id": notice_id})
         if detail_data:
             # 넥슨 API에 따라 'contents' 또는 'content' 필드에 내용이 있음
             raw_content = detail_data.get("contents") or detail_data.get("content")

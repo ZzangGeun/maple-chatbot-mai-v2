@@ -65,7 +65,7 @@ async def verify_and_link_character(
         logger.warning(f"인증 코드 검증 실패: {character_name} (입력: {verification_code}, 캐시: {cached_code})")
         return False, "VERIFICATION_FAILED", None
 
-    nexon_api_key: str = os.getenv("NEXON_API_KEY", "")
+    nexon_api_key: str = getattr(settings, "NEXON_API_KEY", "")
 
     # 2-1. 개발/디버깅 환경 대응 (NEXON_API_KEY가 없고 DEBUG 모드인 경우 Mock 처리)
     if settings.DEBUG and not nexon_api_key:

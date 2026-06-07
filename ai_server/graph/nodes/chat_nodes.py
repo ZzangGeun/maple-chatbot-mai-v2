@@ -17,7 +17,7 @@ from ai_server.prompts.templates import PromptTemplate
 logger = logging.getLogger("ChatNodes")
 
 
-def gemini_chat_node(state: MainState, config: RunnableConfig = None) -> dict:
+async def gemini_chat_node(state: MainState, config: RunnableConfig = None) -> dict:
     """Gemini를 사용한 일상 대화(잡담) 생성 노드"""
     llm = get_gemini_llm()
     logger.info("[GeminiChat] 일반 대화 답변 생성 시작")
@@ -28,5 +28,5 @@ def gemini_chat_node(state: MainState, config: RunnableConfig = None) -> dict:
     ])
 
     chain = prompt | llm | StrOutputParser()
-    response = chain.invoke({"messages": state["messages"]}, config=config)
+    response = await chain.ainvoke({"messages": state["messages"]}, config=config)
     return {"messages": [AIMessage(content=response)]}

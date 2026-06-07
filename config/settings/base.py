@@ -40,7 +40,9 @@ INSTALLED_APPS = DJANGO_APPS + LOCAL_APPS + THIRD_PARTY_APPS
 # 미들웨어
 # ─────────────────────────────────────────────
 MIDDLEWARE = [
+    "common.middleware.request_logging.RequestLoggingMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "common.middleware.error_handler.ErrorHandlerMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",

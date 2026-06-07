@@ -18,7 +18,7 @@ from decouple import config
 # ─────────────────────────────────────────────
 SECRET_KEY = config("SECRET_KEY", default="django-insecure-dev-key-change-me")
 DEBUG = True
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", "*"]
+ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 
 # ─────────────────────────────────────────────
 # CORS (개발 환경: 모든 출처 허용)

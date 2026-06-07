@@ -12,6 +12,7 @@ export default defineConfig(({ command }) => ({
     allowedHosts: true,
     // /api 경로만 Django 백엔드로 프록시합니다.
     // /chat, /character 등 페이지 경로는 React Router가 처리하므로 프록시하지 않습니다.
+    allowedHosts: true,
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:8000',
