@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer, useEffect } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
 import * as authApi from '../api/auth';
 
 const AuthContext = createContext();
@@ -142,6 +142,8 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const clearError = useCallback(() => dispatch({ type: 'SET_ERROR', payload: null }), []);
+
   const openLoginModal = () => dispatch({ type: 'OPEN_LOGIN_MODAL' });
   const closeLoginModal = () => dispatch({ type: 'CLOSE_LOGIN_MODAL' });
   const openSignupModal = () => dispatch({ type: 'OPEN_SIGNUP_MODAL' });
@@ -152,6 +154,7 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     register,
+    clearError,
     openLoginModal,
     closeLoginModal,
     openSignupModal,

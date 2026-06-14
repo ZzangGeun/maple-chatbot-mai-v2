@@ -3,7 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import '../../styles/components/auth.css';
 
 const LoginPopup = () => {
-  const { isLoginModalOpen, closeLoginModal, login, error, isLoading, openSignupModal } = useAuth();
+  const { isLoginModalOpen, closeLoginModal, login, clearError, error, isLoading, openSignupModal } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 
@@ -12,8 +12,9 @@ const LoginPopup = () => {
     if (isLoginModalOpen) {
       setUsername('');
       setPassword('');
+      clearError();
     }
-  }, [isLoginModalOpen]);
+  }, [isLoginModalOpen, clearError]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -42,7 +43,7 @@ const LoginPopup = () => {
                 className="login-popup-input"
                 placeholder="아이디를 입력하세요"
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                onChange={(e) => { setUsername(e.target.value); clearError(); }}
                 required
               />
             </div>
@@ -55,7 +56,7 @@ const LoginPopup = () => {
                 className="login-popup-input"
                 placeholder="비밀번호를 입력하세요"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => { setPassword(e.target.value); clearError(); }}
                 required
               />
             </div>

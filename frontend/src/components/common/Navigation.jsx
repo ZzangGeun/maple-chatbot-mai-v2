@@ -9,6 +9,12 @@ const Navigation = () => {
 
   const isActive = (path) => location.pathname === path ? 'active' : '';
 
+  const handleLogout = () => {
+    if (window.confirm("로그아웃 하시겠습니까?")) {
+      logout();
+    }
+  };
+
   return (
     <nav className="navigation">
       <div className="nav-content">
@@ -27,7 +33,7 @@ const Navigation = () => {
           ) : (
             <div className="nav-user-profile">
               <span className="nav-user-name">{user?.nickname || user?.username || '사용자'}</span>
-              <button className="nav-logout-btn" onClick={logout}>로그아웃</button>
+              <button className="nav-logout-btn" onClick={handleLogout}>로그아웃</button>
             </div>
           )}
         </div>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../../context/AuthContext';
+import { useAuth } from '../../context/AuthContext';
 
 const ChatSidebar = ({
   sessions,
@@ -10,6 +10,13 @@ const ChatSidebar = ({
 }) => {
   const { user, logout, isLoggedIn } = useAuth();
   const navigate = useNavigate();
+
+  const handleLogout = () => {
+    if (window.confirm("로그아웃 하시겠습니까?")) {
+      logout();
+    }
+  };
+
 
   return (
     <>
@@ -61,7 +68,7 @@ const ChatSidebar = ({
         </div>
         <div className="profile-actions">
           {isLoggedIn ? (
-            <button className="logout-btn" onClick={logout}>로그아웃</button>
+            <button className="logout-btn" onClick={handleLogout}>로그아웃</button>
           ) : (
             <button className="logout-btn" onClick={() => navigate('/login')}>로그인</button>
           )}

@@ -62,6 +62,8 @@ class UserProfile(models.Model):
         max_length=12,
         unique=True,
         db_index=True,
+        null=True,
+        blank=True,
         verbose_name='메이플 닉네임'
     )
 

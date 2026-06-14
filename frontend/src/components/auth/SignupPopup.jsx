@@ -3,12 +3,13 @@ import { useAuth } from '../../context/AuthContext';
 import '../../styles/components/auth.css';
 
 const SignupPopup = () => {
-    const { isSignupModalOpen, closeSignupModal, openLoginModal, register, error, isLoading } = useAuth();
+    const { isSignupModalOpen, closeSignupModal, openLoginModal, register, clearError, error, isLoading } = useAuth();
     const [formData, setFormData] = useState({
         username: '',
-        email: '',
         password: '',
-        password_confirm: '',
+        confirm_password: '',
+        maple_nickname: '',
+        nexon_api_key: '',
     });
     const [localError, setLocalError] = useState('');
 
@@ -17,38 +18,43 @@ const SignupPopup = () => {
         if (isSignupModalOpen) {
             setFormData({
                 username: '',
-                email: '',
                 password: '',
-                password_confirm: '',
+                confirm_password: '',
+                maple_nickname: '',
+                nexon_api_key: '',
             });
             setLocalError('');
+            clearError();
         }
-    }, [isSignupModalOpen]);
+    }, [isSignupModalOpen, clearError]);
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
         setLocalError('');
+        clearError();
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
 
         // 비밀번호 확인 체크
-        if (formData.password !== formData.password_confirm) {
+        if (formData.password !== formData.confirm_password) {
             setLocalError('비밀번호가 일치하지 않습니다.');
             return;
         }
 
         // 비밀번호 길이 체크
-        if (formData.password.length < 6) {
-            setLocalError('비밀번호는 6자 이상이어야 합니다.');
+        if (formData.password.length < 8) {
+            setLocalError('비밀번호는 최소 8자 이상이어야 합니다.');
             return;
         }
 
         const result = await register({
             username: formData.username,
-            email: formData.email,
             password: formData.password,
+            confirm_password: formData.confirm_password,
+            maple_nickname: formData.maple_nickname,
+            nexon_api_key: formData.nexon_api_key,
         });
 
         if (result.success) {
@@ -89,22 +95,8 @@ const SignupPopup = () => {
                                 id="signupUsername"
                                 name="username"
                                 className="login-popup-input"
-                                placeholder="아이디를 입력하세요"
+                                placeholder="아이디를 입력하세요 (6~20자 영문,숫자,_)"
                                 value={formData.username}
-                                onChange={handleChange}
-                                required
-                            />
-                        </div>
-
-                        <div className="login-input-group">
-                            <label htmlFor="signupEmail">이메일</label>
-                            <input
-                                type="email"
-                                id="signupEmail"
-                                name="email"
-                                className="login-popup-input"
-                                placeholder="이메일을 입력하세요"
-                                value={formData.email}
                                 onChange={handleChange}
                                 required
                             />
@@ -117,7 +109,7 @@ const SignupPopup = () => {
                                 id="signupPassword"
                                 name="password"
                                 className="login-popup-input"
-                                placeholder="비밀번호를 입력하세요 (6자 이상)"
+                                placeholder="비밀번호를 입력하세요 (8자 이상)"
                                 value={formData.password}
                                 onChange={handleChange}
                                 required
@@ -125,16 +117,42 @@ const SignupPopup = () => {
                         </div>
 
                         <div className="login-input-group">
-                            <label htmlFor="signupPasswordConfirm">비밀번호 확인</label>
+                            <label htmlFor="signupConfirmPassword">비밀번호 확인</label>
                             <input
                                 type="password"
-                                id="signupPasswordConfirm"
-                                name="password_confirm"
+                                id="signupConfirmPassword"
+                                name="confirm_password"
                                 className="login-popup-input"
                                 placeholder="비밀번호를 다시 입력하세요"
-                                value={formData.password_confirm}
+                                value={formData.confirm_password}
                                 onChange={handleChange}
                                 required
+                            />
+                        </div>
+
+                        <div className="login-input-group">
+                            <label htmlFor="signupMapleNickname">메이플 닉네임 (선택)</label>
+                            <input
+                                type="text"
+                                id="signupMapleNickname"
+                                name="maple_nickname"
+                                className="login-popup-input"
+                                placeholder="메이플스토리 닉네임을 입력하세요 (최대 12자)"
+                                value={formData.maple_nickname}
+                                onChange={handleChange}
+                            />
+                        </div>
+
+                        <div className="login-input-group">
+                            <label htmlFor="signupNexonApiKey">넥슨 API 키 (선택)</label>
+                            <input
+                                type="text"
+                                id="signupNexonApiKey"
+                                name="nexon_api_key"
+                                className="login-popup-input"
+                                placeholder="넥슨 오픈 API 키를 입력하세요"
+                                value={formData.nexon_api_key}
+                                onChange={handleChange}
                             />
                         </div>
 

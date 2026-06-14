@@ -8,6 +8,7 @@
 
 import logging
 import re
+from typing import Optional
 
 from asgiref.sync import sync_to_async
 from django.contrib.auth.models import User
@@ -34,11 +35,15 @@ async def validate_signup_data(data: dict) -> tuple[bool, str]:
     user_id = data.get("user_id", "").strip()
     password = data.get("password", "").strip()
     confirm_password = data.get("confirm_password", "").strip()
-    maple_nickname = data.get("maple_nickname", "").strip()
-    nexon_api_key = data.get("nexon_api_key", "").strip()
+
+    maple_nickname = data.get("maple_nickname")
+    maple_nickname = maple_nickname.strip() if maple_nickname else None
+
+    nexon_api_key = data.get("nexon_api_key")
+    nexon_api_key = nexon_api_key.strip() if nexon_api_key else None
 
     # 필수 필드 확인
-    if not all([user_id, password, confirm_password, maple_nickname, nexon_api_key]):
+    if not all([user_id, password, confirm_password]):
         return False, "필수 필드를 모두 채워주세요."
 
     # 아이디 형식 검사 (6~20자, 영문/숫자/밑줄)
@@ -58,24 +63,35 @@ async def validate_signup_data(data: dict) -> tuple[bool, str]:
         return False, "이미 존재하는 아이디입니다."
 
     # 메이플 닉네임 중복 검사 (비동기)
-    if await UserProfile.objects.filter(maple_nickname=maple_nickname).aexists():
-        return False, "이미 사용 중인 메이플 닉네임입니다."
+    if maple_nickname:
+        if await UserProfile.objects.filter(maple_nickname=maple_nickname).aexists():
+            return False, "이미 사용 중인 메이플 닉네임입니다."
 
     # 넥슨 API 키 기반 캐릭터 본인 확인 검증
-    try:
-        nexon_res = await process_signup_with_key(nexon_api_key)
-        if not nexon_res:
-            return False, "유효하지 않은 넥슨 API 키이거나 해당 계정에 연동된 캐릭터가 존재하지 않습니다."
-        
-        best_char_name, _ = nexon_res
-        
-        # 가입 닉네임과 계정의 최고 레벨 대표 캐릭터명이 일치하는지 검사
-        if best_char_name.strip().lower() != maple_nickname.strip().lower():
-            return False, f"입력하신 닉네임이 해당 API 키 계정의 대표 캐릭터(최고 레벨 캐릭터)와 일치하지 않습니다. (대표 캐릭터명: {best_char_name})"
-            
-    except Exception as e:
-        logger.error(f"회원가입 넥슨 API 검증 중 오류: {e}")
-        return False, "넥슨 API 검증 처리 중 서버 오류가 발생했습니다."
+    if nexon_api_key:
+        if not maple_nickname:
+            return False, "넥슨 API 키를 입력한 경우 메이플 닉네임도 입력해야 합니다."
+
+        try:
+            nexon_res = await process_signup_with_key(nexon_api_key)
+            if not nexon_res:
+                return (
+                    False,
+                    "유효하지 않은 넥슨 API 키이거나 해당 계정에 연동된 캐릭터가 존재하지 않습니다.",
+                )
+
+            best_char_name, _ = nexon_res
+
+            # 가입 닉네임과 계정의 최고 레벨 대표 캐릭터명이 일치하는지 검사
+            if best_char_name.strip().lower() != maple_nickname.strip().lower():
+                return (
+                    False,
+                    f"입력하신 닉네임이 해당 API 키 계정의 대표 캐릭터(최고 레벨 캐릭터)와 일치하지 않습니다. (대표 캐릭터명: {best_char_name})",
+                )
+
+        except Exception as e:
+            logger.error(f"회원가입 넥슨 API 검증 중 오류: {e}")
+            return False, "넥슨 API 검증 처리 중 서버 오류가 발생했습니다."
 
     return True, ""
 
@@ -83,8 +99,8 @@ async def validate_signup_data(data: dict) -> tuple[bool, str]:
 async def create_user_with_profile(
     user_id: str,
     password: str,
-    maple_nickname: str,
-    nexon_api_key: str,
+    maple_nickname: Optional[str] = None,
+    nexon_api_key: Optional[str] = None,
 ) -> User:
     """
     Django User와 UserProfile을 비동기적으로 생성합니다.
@@ -105,7 +121,9 @@ async def create_user_with_profile(
         Exception: DB 저장 중 예외 발생 시 상위로 전파합니다.
     """
     # create_user는 동기 헬퍼이므로 sync_to_async로 감싸 호출합니다.
-    user = await sync_to_async(User.objects.create_user)(username=user_id, password=password)
+    user = await sync_to_async(User.objects.create_user)(
+        username=user_id, password=password
+    )
 
     await UserProfile.objects.acreate(
         user=user,

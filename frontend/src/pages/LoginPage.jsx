@@ -7,7 +7,7 @@ import '../styles/globals/common.css';
 const LoginPage = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const { login, isLoading, error } = useAuth();
+  const { login, isLoading, error, openSignupModal } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -58,7 +58,7 @@ const LoginPage = () => {
         </form>
         
         <div style={{ marginTop: '20px', fontSize: '13px', color: '#666' }}>
-          계정이 없으신가요? <span style={{ color: '#ffb7c5', cursor: 'pointer' }} onClick={() => alert('회원가입 기능 구현 예정')}>회원가입</span>
+          계정이 없으신가요? <span style={{ color: '#ffb7c5', cursor: 'pointer' }} onClick={openSignupModal}>회원가입</span>
         </div>
       </div>
     </div>

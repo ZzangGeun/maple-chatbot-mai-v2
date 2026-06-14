@@ -7,9 +7,9 @@ Django Ninja 의존성을 제거하고 순수 pydantic.BaseModel로 전환합니
 """
 
 import re
+from typing import Optional
 
 from pydantic import BaseModel, field_validator, model_validator
-
 
 # ---------------------------------------------------------------------------
 # 요청(Request) 스키마
@@ -22,15 +22,17 @@ class SignupSchema(BaseModel):
     username: str
     password: str
     confirm_password: str
-    maple_nickname: str
-    nexon_api_key: str
+    maple_nickname: Optional[str] = None
+    nexon_api_key: Optional[str] = None
 
     @field_validator("username")
     @classmethod
     def validate_username(cls, v: str) -> str:
         """아이디 형식 검사: 6~20자, 영문/숫자/밑줄만 허용합니다."""
         if not re.match(r"^[a-zA-Z0-9_]{6,20}$", v):
-            raise ValueError("아이디는 6~20자의 영문자, 숫자, 밑줄(_)만 사용할 수 있습니다.")
+            raise ValueError(
+                "아이디는 6~20자의 영문자, 숫자, 밑줄(_)만 사용할 수 있습니다."
+            )
         return v
 
     @field_validator("password")

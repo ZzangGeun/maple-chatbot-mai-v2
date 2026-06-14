@@ -10,7 +10,7 @@ Django Ninja Router에서 표준 Django 뷰로 전환합니다.
 import json
 import logging
 
-from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth import authenticate, login, logout, aauthenticate, alogin, alogout
 from django.contrib.auth.models import User
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -122,7 +122,7 @@ async def login_view(request) -> JsonResponse:
         "username": data.username,
         "password": data.password,
     }
-    user = await sync_to_async(authenticate)(**credentials)
+    user = await aauthenticate(request, **credentials)
 
     if user is None:
         logger.warning(f"로그인 실패 (비밀번호 불일치): {data.username}")
@@ -133,7 +133,7 @@ async def login_view(request) -> JsonResponse:
     if not user.is_active:
         return JsonResponse({"detail": "비활성화된 계정입니다."}, status=401)
 
-    await sync_to_async(login)(request, user)
+    await alogin(request, user)
 
     profile = await sync_to_async(UserProfile.objects.get_by_user_or_none)(user)
     maple_nickname = profile.maple_nickname if profile else None

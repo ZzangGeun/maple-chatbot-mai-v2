@@ -13,12 +13,33 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from apps.chat.models import ChatSession
-from apps.chat.services import stream_message_generator
+from apps.chat.services import send_message_async, stream_message_generator
+
+
+from django.contrib.auth.models import User
+from asgiref.sync import sync_to_async
 
 logger = logging.getLogger(__name__)
 
 
-from asgiref.sync import sync_to_async
+@sync_to_async
+def get_request_user(request) -> User | None:
+    """비동기 컨텍스트에서 안전하게 request.user 객체를 획득합니다.
+
+    Django의 lazy user 평가는 동기 데이터베이스 쿼리를 수반하므로,
+    비동기 뷰 스레드에서 직접 평가 시 SynchronousOnlyOperation 예외가 발생할 수 있습니다.
+    따라서 sync_to_async를 사용하여 백그라운드 스레드에서 안전하게 로드합니다.
+
+    Args:
+        request: Django HTTP 요청 객체.
+
+    Returns:
+        인증된 경우 Django User 객체, 그렇지 않다면 None.
+    """
+    if request.user.is_authenticated:
+        return request.user
+    return None
+
 
 # ---------------------------------------------------------------------------
 # 세션 관련 엔드포인트
@@ -31,9 +52,10 @@ async def get_sessions(request) -> JsonResponse:
 
     GET /api/v1/chat/rooms
     """
-    if request.user.is_authenticated:
+    user = await get_request_user(request)
+    if user:
         # filter는 sync, 하지만 비동기 반복 가능
-        sessions = [s async for s in ChatSession.objects.filter(user=request.user).order_by("-created_at")]
+        sessions = [s async for s in ChatSession.objects.filter(user=user).order_by("-created_at")]
     else:
         sessions = []
 
@@ -66,7 +88,7 @@ async def create_session(request) -> JsonResponse:
 
     POST /api/v1/chat/rooms
     """
-    user_profile = request.user if request.user.is_authenticated else None
+    user_profile = await get_request_user(request)
 
     # 요청 바디에서 room_name 추출
     try:
@@ -143,8 +165,8 @@ async def send_message(request, session_id: str) -> JsonResponse:
         return JsonResponse({"success": False, "error_code": "CONTENT_REQUIRED", "message": "메시지 본문(message_content)이 유비되어야 합니다."}, status=400)
 
     # 비즈니스 로직 호출
-    from apps.chat.services import send_message_async
     saved_msg, _ = await send_message_async(session, content)
+
 
     return JsonResponse(
         {
@@ -225,6 +247,5 @@ async def stream_message(request, session_id: str) -> StreamingHttpResponse:
     except (json.JSONDecodeError, ValueError):
         return JsonResponse({"error": "유효하지 않은 요청 형식입니다."}, status=400)
 
-    from apps.chat.services import stream_message_generator
     stream_generator = stream_message_generator(session, content)
     return StreamingHttpResponse(stream_generator, content_type="text/event-stream")
