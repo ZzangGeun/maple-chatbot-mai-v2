@@ -10,7 +10,7 @@ Django Ninja Router에서 표준 Django 뷰로 전환합니다.
 import json
 import logging
 
-from django.contrib.auth import authenticate, login, logout, aauthenticate, alogin, alogout
+from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -110,30 +110,22 @@ async def login_view(request) -> JsonResponse:
             status=400,
         )
 
-    # 1. 아이디 존재 여부 검사 (보안상 권장되지는 않으나 명확한 오류 피드백을 위해 분리)
-    user_exists = await User.objects.filter(username=data.username).aexists()
-    if not user_exists:
-        logger.warning(f"로그인 실패 (존재하지 않는 아이디): {data.username}")
-        return JsonResponse(
-            {"detail": "존재하지 않는 아이디입니다."}, status=401
-        )
-
     credentials = {
         "username": data.username,
         "password": data.password,
     }
-    user = await aauthenticate(request, **credentials)
+    # Authenticate synchronously via threadpool to support async view
+    user = await sync_to_async(authenticate)(request, **credentials)
 
     if user is None:
-        logger.warning(f"로그인 실패 (비밀번호 불일치): {data.username}")
-        return JsonResponse(
-            {"detail": "비밀번호가 일치하지 않습니다."}, status=401
-        )
+        logger.warning(f"로그인 실패 (인증 실패): {data.username}")
+        return JsonResponse({"detail": "아이디 또는 비밀번호가 일치하지 않습니다."}, status=401)
 
     if not user.is_active:
         return JsonResponse({"detail": "비활성화된 계정입니다."}, status=401)
 
-    await alogin(request, user)
+    # Perform login in a thread-sensitive sync wrapper (session modifications require thread-sensitive execution)
+    await sync_to_async(login, thread_sensitive=True)(request, user)
 
     profile = await sync_to_async(UserProfile.objects.get_by_user_or_none)(user)
     maple_nickname = profile.maple_nickname if profile else None
