@@ -1,3 +1,7 @@
+// ⚠️ 목업(mock) 데이터 소스 사용
+// 이 페이지는 `useCommunity` 훅이 제공하는 목업 데이터로 렌더된다.
+// 실제 백엔드 커뮤니티 API 연동은 이 스펙 범위 밖이며, 표시되는 게시글은
+// 클라이언트 메모리 상의 목업 데이터다.
 import React from 'react';
 import Layout from '../components/common/Layout';
 import { useAuth } from '../context/AuthContext';

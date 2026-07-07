@@ -52,7 +52,10 @@ const ChatMessages = ({ messages, isLoading, messagesEndRef }) => {
                     [idx]: !prev[idx]
                   }))}
                 >
-                  <span className={`thinking-toggle-icon ${expandedThinking[idx] ? 'expanded' : ''}`}>
+                  <span
+                    className={`thinking-toggle-icon ${expandedThinking[idx] ? 'expanded' : ''}`}
+                    aria-hidden="true"
+                  >
                     🧠
                   </span>
                   {expandedThinking[idx] ? '사고 과정 숨기기' : '사고 과정 보기'}

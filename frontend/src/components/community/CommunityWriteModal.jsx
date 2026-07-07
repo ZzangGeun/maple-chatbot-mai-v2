@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { getCategoryIcon } from '../../utils/communityUtils';
+import { useModalA11y } from '../../hooks/useModalA11y';
 
 const CommunityWriteModal = ({
     setShowWriteModal,
@@ -8,9 +9,14 @@ const CommunityWriteModal = ({
     handleSubmitPost,
     categories
 }) => {
+    // 이 모달은 부모가 조건부로 마운트하므로, 마운트되어 있는 동안 항상 열린 상태다.
+    const closeModal = useCallback(() => setShowWriteModal(false), [setShowWriteModal]);
+    // 모달 접근성: 포커스 트랩 + Escape 닫기 + 포커스 복귀 (요구사항 9.3, 9.4)
+    const modalRef = useModalA11y(true, closeModal);
+
     return (
         <div className="modal-overlay" onClick={() => setShowWriteModal(false)}>
-            <div className="write-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="write-modal" ref={modalRef} role="dialog" aria-modal="true" aria-label="게시글 작성" onClick={(e) => e.stopPropagation()}>
                 <div className="modal-header">
                     <h2>게시글 작성</h2>
                     <button className="close-btn" onClick={() => setShowWriteModal(false)}>×</button>

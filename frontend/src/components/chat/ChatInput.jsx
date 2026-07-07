@@ -26,6 +26,7 @@ const ChatInput = ({ onSend, isLoading, currentSessionId, initialMessage }) => {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="메시지를 입력하세요..."
+          aria-label="메시지 입력"
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
@@ -36,9 +37,10 @@ const ChatInput = ({ onSend, isLoading, currentSessionId, initialMessage }) => {
         <button
           type="submit"
           className="chat-send-main"
+          aria-label="메시지 보내기"
           disabled={isLoading || !currentSessionId || !input.trim()}
         >
-          ➤
+          <span aria-hidden="true">➤</span>
         </button>
       </form>
     </div>

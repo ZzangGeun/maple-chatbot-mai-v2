@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import * as homeApi from '../api/home';
+import * as characterApi from '../api/character';
 
 export const useCharacterSearch = () => {
     const [characterInfo, setCharacterInfo] = useState(null);
@@ -15,7 +15,7 @@ export const useCharacterSearch = () => {
         if (!isAuto) setCharacterTitle('검색 결과');
 
         try {
-            const response = await homeApi.searchCharacter(searchName);
+            const response = await characterApi.searchCharacter(searchName);
             if (response.data.status === 'success') {
                 setCharacterInfo(response.data.data);
                 if (isAuto) setCharacterTitle('내 캐릭터');

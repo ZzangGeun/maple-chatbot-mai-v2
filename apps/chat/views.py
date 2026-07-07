@@ -54,7 +54,7 @@ async def get_sessions(request) -> JsonResponse:
             {
                 "id": str(session.session_id),
                 "room_name": title,  # 설계서 스펙
-                "updated_at": session.created_at.isoformat(),  # 설계서 스펙
+                "created_at": session.created_at.isoformat(),  # 설계서 스펙 (create_session과 계약 일치)
             }
         )
     return JsonResponse({"success": True, "rooms": session_list}, status=200)
@@ -227,4 +227,4 @@ async def stream_message(request, session_id: str) -> StreamingHttpResponse:
 
     from apps.chat.services import stream_message_generator
     stream_generator = stream_message_generator(session, content)
-    return StreamingHttpResponse(stream_generator, content_type="text/event-stream")
+    return StreamingHttpResponse(stream_generator, content_type="text/event-stream")

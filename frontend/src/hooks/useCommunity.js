@@ -1,3 +1,7 @@
+// ⚠️ 목업(mock) 데이터 소스 사용
+// 이 훅은 백엔드 커뮤니티 API와 연동되어 있지 않으며, 아래 `mockPostsList`를
+// 데이터 소스로 사용한다. 게시글 목록/작성/필터/정렬은 모두 클라이언트 메모리
+// 상의 목업 데이터에 대해 동작한다. 백엔드 커뮤니티 앱 신설은 이 스펙 범위 밖이다.
 import { useState, useEffect } from 'react';
 
 const mockPostsList = [
@@ -65,6 +69,38 @@ const mockPostsList = [
     }
 ];
 
+/**
+ * 커뮤니티 목업 게시글 목록을 카테고리로 필터링하고 정렬 기준으로 정렬한다.
+ * 순수 함수(입력을 변형하지 않음)로, 필터·정렬 계약을 테스트 가능하게 노출한다.
+ *
+ * 계약:
+ * - 반환 목록은 항상 원본 `posts`의 부분집합이다(원소 추가 없음).
+ * - `category`가 'all'이 아니면 모든 원소의 `category`가 선택값과 일치한다.
+ * - `sortBy`에 따라 정렬된다: 'latest'(createdAt 내림차순),
+ *   'popular'(likes+comments 내림차순), 'views'(views 내림차순).
+ *
+ * @param {Array} posts 원본 게시글 배열
+ * @param {string} category 선택된 카테고리('all' 포함)
+ * @param {string} sortBy 정렬 기준('latest' | 'popular' | 'views')
+ * @returns {Array} 필터링·정렬된 새 배열
+ */
+export const filterAndSortPosts = (posts, category, sortBy) => {
+    const filteredPosts = category === 'all'
+        ? posts
+        : posts.filter(post => post.category === category);
+
+    return [...filteredPosts].sort((a, b) => {
+        if (sortBy === 'latest') {
+            return new Date(b.createdAt) - new Date(a.createdAt);
+        } else if (sortBy === 'popular') {
+            return (b.likes + b.comments) - (a.likes + a.comments);
+        } else if (sortBy === 'views') {
+            return b.views - a.views;
+        }
+        return 0;
+    });
+};
+
 export const useCommunity = (user) => {
     const [posts, setPosts] = useState([]);
     const [mockPosts, setMockPosts] = useState(mockPostsList);
@@ -94,20 +130,7 @@ export const useCommunity = (user) => {
     const fetchPosts = async () => {
         setIsLoading(true);
         try {
-            const filteredPosts = selectedCategory === 'all'
-                ? mockPosts
-                : mockPosts.filter(post => post.category === selectedCategory);
-
-            const sortedPosts = [...filteredPosts].sort((a, b) => {
-                if (sortBy === 'latest') {
-                    return new Date(b.createdAt) - new Date(a.createdAt);
-                } else if (sortBy === 'popular') {
-                    return (b.likes + b.comments) - (a.likes + a.comments);
-                } else if (sortBy === 'views') {
-                    return b.views - a.views;
-                }
-                return 0;
-            });
+            const sortedPosts = filterAndSortPosts(mockPosts, selectedCategory, sortBy);
 
             setPosts(sortedPosts);
 

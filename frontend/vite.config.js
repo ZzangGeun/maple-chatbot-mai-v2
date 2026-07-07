@@ -12,7 +12,6 @@ export default defineConfig(({ command }) => ({
     allowedHosts: true,
     // /api 경로만 Django 백엔드로 프록시합니다.
     // /chat, /character 등 페이지 경로는 React Router가 처리하므로 프록시하지 않습니다.
-    allowedHosts: true,
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:8000',
@@ -35,5 +34,14 @@ export default defineConfig(({ command }) => ({
     outDir: '../static/dist',
     emptyOutDir: true,
     manifest: true,
+  },
+  // Vitest 설정: 속성 기반 테스트(fast-check) 및 렌더/상호작용
+  // 테스트(@testing-library/react)를 위한 jsdom 환경
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.js',
+    css: true,
+    include: ['src/**/*.{test,spec}.{js,jsx}'],
   }
 }))

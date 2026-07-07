@@ -2,6 +2,26 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext';
 
+// 값이 없는 프로필 항목에 대해 표시할 대체 문자열
+export const PROFILE_FALLBACK = '미설정';
+
+/**
+ * 프로필 필드 값을 표시용으로 정규화하는 순수 헬퍼.
+ * 값이 없으면(null/undefined/빈 문자열) 대체 표시(PROFILE_FALLBACK)를 반환하고,
+ * 값이 있으면 그대로 반환한다.
+ * @param {*} value - AuthContext.user에서 읽은 원본 프로필 값
+ * @returns {string} 표시할 값 또는 대체 표시
+ */
+export const resolveProfileField = (value) => {
+  if (value === null || value === undefined) {
+    return PROFILE_FALLBACK;
+  }
+  if (typeof value === 'string' && value.trim() === '') {
+    return PROFILE_FALLBACK;
+  }
+  return value;
+};
+
 const ChatSidebar = ({
   sessions,
   currentSessionId,
@@ -25,7 +45,8 @@ const ChatSidebar = ({
                 {isLoggedIn ? (user?.maple_nickname || user?.username || 'User') : 'Guest'}
               </div>
               <div className="profile-server">
-                <span className="server-icon"></span>LUNA
+                <span className="server-icon"></span>
+                {isLoggedIn ? resolveProfileField(user?.server) : PROFILE_FALLBACK}
               </div>
             </div>
             <div className="divider"></div>
@@ -33,15 +54,15 @@ const ChatSidebar = ({
               <div className="profile-stats">
                 <div className="stat-row">
                   <span className="stat-label">Lv.</span>
-                  <span className="stat-value">285</span>
+                  <span className="stat-value">{resolveProfileField(user?.level)}</span>
                 </div>
                 <div className="stat-row">
                   <span className="stat-label">직업</span>
-                  <span className="stat-value">아델</span>
+                  <span className="stat-value">{resolveProfileField(user?.job)}</span>
                 </div>
                 <div className="stat-row">
                   <span className="stat-label">길드</span>
-                  <span className="stat-value">MAI</span>
+                  <span className="stat-value">{resolveProfileField(user?.guild)}</span>
                 </div>
               </div>
             ) : (
@@ -54,7 +75,7 @@ const ChatSidebar = ({
             )}
           </div>
           {isLoggedIn && (
-            <div className="detail-link" onClick={() => alert('상세 정보 기능 구현 예정')}>
+            <div className="detail-link" onClick={() => navigate('/character')}>
               상세
             </div>
           )}

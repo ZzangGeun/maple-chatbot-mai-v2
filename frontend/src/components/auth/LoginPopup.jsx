@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useModalA11y } from '../../hooks/useModalA11y';
 import '../../styles/components/auth.css';
 
 const LoginPopup = () => {
   const { isLoginModalOpen, closeLoginModal, login, error, isLoading, openSignupModal } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  // 모달 접근성: 포커스 트랩 + Escape 닫기 + 포커스 복귀 (요구사항 9.3, 9.4)
+  const modalRef = useModalA11y(isLoginModalOpen, closeLoginModal);
 
   // 모달이 열릴 때 입력창 초기화
   useEffect(() => {
@@ -24,7 +27,7 @@ const LoginPopup = () => {
 
   return (
     <div className="login-popup-overlay" onClick={closeLoginModal}>
-      <div className="login-popup-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="login-popup-modal" ref={modalRef} role="dialog" aria-modal="true" aria-label="로그인" onClick={(e) => e.stopPropagation()}>
         <div className="login-popup-header">
           <h3>로그인</h3>
           <button className="login-popup-close" onClick={closeLoginModal}>&times;</button>
