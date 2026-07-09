@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import '../../styles/common.css';
+import '../../styles/globals/common.css';
 
 const Navigation = () => {
   const { user, isLoggedIn, logout, openLoginModal } = useAuth();

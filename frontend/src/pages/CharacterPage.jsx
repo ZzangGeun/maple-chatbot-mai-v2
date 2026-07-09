@@ -38,10 +38,10 @@ const CharacterPage = () => {
                 {error && (
                     <div style={{
                         padding: '16px',
-                        background: '#fff5f5',
-                        border: '1px solid #ffcdd2',
+                        background: 'var(--error-bg)',
+                        border: '1px solid var(--error-border)',
                         borderRadius: '12px',
-                        color: '#c62828',
+                        color: 'var(--error-text)',
                         marginBottom: '20px'
                     }}>
                         ⚠️ {error}

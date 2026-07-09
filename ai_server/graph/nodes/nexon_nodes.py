@@ -41,7 +41,8 @@ async def gemini_intent_extract_node(state: NexonState, config: RunnableConfig =
     문자열 파싱 과정(백틱 제거, JSON 변환 등)에서의 에러 발생 가능성을 
     근본적으로 배제하기 위해 LangChain의 `with_structured_output` API를 활용합니다.
     """
-    llm = get_gemini_llm()
+    # 구조화 추출은 결정적 출력이 필요하므로 temperature=0.0을 사용합니다.
+    llm = get_gemini_llm(temperature=0.0)
     # Pydantic 모델을 전달하여 Gemini가 정의된 형태의 JSON 객체를 바로 채워서 응답하도록 유도합니다.
     structured_llm = llm.with_structured_output(MapleCharacterIntent)
     
@@ -61,9 +62,11 @@ async def gemini_intent_extract_node(state: NexonState, config: RunnableConfig =
         result: MapleCharacterIntent = await chain.ainvoke({"question": question}, config=config)
         entities = result.model_dump()
     except Exception as e:
-        # 예외 발생 시, 서비스 먹통을 막고 흐름을 유지하기 위해 원본 질문 전체를 캐릭터명으로 간주하는 방어 코드를 수행합니다.
+        # 추출 실패 시 캐릭터명을 비워 둔다.
+        # (질문 전체를 캐릭터명으로 사용하면 넥슨 API에 잘못된 요청이 나가므로,
+        # nexon_api_tool_node의 '캐릭터명 인식 실패' 경로를 타도록 합니다.)
         logger.error(f"[GeminiIntentExtract] 구조화 추출 중 예상치 못한 오류 발생: {e}")
-        entities = {"character_name": question, "world": None, "item_name": None}
+        entities = {"character_name": None, "world": None, "item_name": None}
 
     logger.info(f"[GeminiIntentExtract] 최종 추출된 엔티티: {entities}")
     return {"extracted_entities": entities}

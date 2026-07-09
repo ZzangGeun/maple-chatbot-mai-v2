@@ -36,7 +36,7 @@ const ImageRoller = ({ items, renderItem, interval = 3000 }) => {
     }, [items, interval]);
 
     if (!items || items.length === 0) {
-        return <div style={{ padding: '20px', textAlign: 'center', color: '#999' }}>정보가 없습니다.</div>;
+        return <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-placeholder)' }}>정보가 없습니다.</div>;
     }
 
     const currentItem = items[currentIndex];

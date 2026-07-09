@@ -8,6 +8,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.types import RetryPolicy
 
 from ai_server.graph.state.main_state import MainState
 from ai_server.graph.nodes.route_nodes import gemini_route_node
@@ -24,8 +25,12 @@ def build_main_graph(checkpointer: BaseCheckpointSaver | None = None) -> Compile
     workflow.add_node("rag_graph", rag_graph)
     workflow.add_node("nexon_graph", nexon_graph)
     
-    # 단일 노드(채팅) 등록
-    workflow.add_node("chat_node", gemini_chat_node)
+    # 단일 노드(채팅) 등록 — Gemini 호출 노드이므로 재시도 정책 적용
+    workflow.add_node(
+        "chat_node",
+        gemini_chat_node,
+        retry_policy=RetryPolicy(max_attempts=3, initial_interval=0.5, backoff_factor=2.0),
+    )
 
     # START -> 각 서브 그래프/노드로 조건부 라우팅
     workflow.add_conditional_edges(

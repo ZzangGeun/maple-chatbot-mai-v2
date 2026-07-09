@@ -18,16 +18,16 @@ const NoticeItem = styled.div`
   align-items: center;
   padding: 0 10px;
   font-size: 13px;
-  color: #333;
-  border-bottom: 1px solid #f0f0f0;
+  color: var(--text-dark);
+  border-bottom: 1px solid var(--border-subtle);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
 
   &:hover {
-    background-color: #f9f9f9;
-    color: #ffb7c5;
+    background-color: var(--background-hover);
+    color: var(--link-pink);
   }
 `;
 
@@ -45,7 +45,7 @@ const NoticeRoller = ({ notices }) => {
   }, [notices]);
 
   if (!notices || notices.length === 0) {
-    return <div style={{ padding: '10px', color: '#999', fontSize: '12px', textAlign: 'center' }}>등록된 공지가 없습니다.</div>;
+    return <div style={{ padding: '10px', color: 'var(--text-placeholder)', fontSize: '12px', textAlign: 'center' }}>등록된 공지가 없습니다.</div>;
   }
 
   return (

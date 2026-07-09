@@ -18,7 +18,33 @@
     /* Colors - Borders & Backgrounds */
     --border-light: #f0e6dc;
     --border-gray: #d0d0d0;
+    --border-subtle: #f0f0f0;
     --background-light: #fffaf5;
+    --background-hover: #f9f9f9;
+    --background-muted: #f8f9fa;
+
+    /* Colors - Neutral Extended */
+    --text-dark: #333333;
+    --text-light-gray: #666666;
+    --text-placeholder: #999999;
+    --color-white: #ffffff;
+    --overlay-dark: rgba(0, 0, 0, 0.6);
+
+    /* Colors - Accent Pink (links) */
+    --link-pink: #ffb7c5;
+
+    /* Colors - Semantic States */
+    --error-color: #dc3545;
+    --error-text: #c62828;
+    --error-bg: #fff5f5;
+    --error-border: #ffcdd2;
+
+    /* Colors - Equipment Potential Grades */
+    --grade-legendary: #00ff00;
+    --grade-unique: #ffcc00;
+    --grade-epic: #cc66ff;
+    --grade-rare: #66ccff;
+    --grade-default: #999999;
     
     /* Gradients */
     --background-gradient: linear-gradient(135deg, #fffaf5 0%, #fff5eb 100%);

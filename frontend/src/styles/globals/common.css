@@ -408,3 +408,73 @@
         font-size: 18px;
     }
 }
+
+/* ============================================================================= 
+   NAVIGATION LOGIN & PROFILE STYLES
+   (레거시 styles/common.css에서 통합됨 - Navigation.jsx가 사용)
+============================================================================= */
+
+.nav-login-section {
+    display: flex;
+    align-items: center;
+}
+
+.nav-login-btn {
+    padding: 6px 12px;
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: var(--border-radius-small);
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 13px;
+    transition: var(--transition-fast);
+}
+
+.nav-login-btn:hover {
+    background: var(--primary-dark);
+}
+
+.nav-user-profile {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.nav-user-name {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.nav-profile-btn {
+    padding: 6px 12px;
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: var(--border-radius-small);
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 13px;
+    transition: var(--transition-fast);
+}
+
+.nav-profile-btn:hover {
+    background: var(--primary-dark);
+}
+
+.nav-logout-btn {
+    padding: 6px 12px;
+    background: var(--danger-color, #dc3545);
+    color: white;
+    border: none;
+    border-radius: var(--border-radius-small);
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 13px;
+    transition: var(--transition-fast);
+}
+
+.nav-logout-btn:hover {
+    background: var(--danger-dark, #c82333);
+}

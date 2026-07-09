@@ -26,7 +26,7 @@ const LoginPage = () => {
           <p>서비스를 이용하려면 로그인해주세요.</p>
         </div>
         
-        {error && <div style={{ color: '#dc3545', marginBottom: '15px', fontSize: '14px' }}>{error}</div>}
+        {error && <div style={{ color: 'var(--error-color)', marginBottom: '15px', fontSize: '14px' }}>{error}</div>}
         
         <form className="login-form" onSubmit={handleSubmit}>
           <input
@@ -57,8 +57,8 @@ const LoginPage = () => {
           </button>
         </form>
         
-        <div style={{ marginTop: '20px', fontSize: '13px', color: '#666' }}>
-          계정이 없으신가요? <span style={{ color: '#ffb7c5', cursor: 'pointer' }} onClick={openSignupModal}>회원가입</span>
+        <div style={{ marginTop: '20px', fontSize: '13px', color: 'var(--text-light-gray)' }}>
+          계정이 없으신가요? <span style={{ color: 'var(--link-pink)', cursor: 'pointer' }} onClick={openSignupModal}>회원가입</span>
         </div>
       </div>
     </div>
