@@ -1,72 +1,13 @@
-// ⚠️ 목업(mock) 데이터 소스 사용
-// 이 훅은 백엔드 커뮤니티 API와 연동되어 있지 않으며, 아래 `mockPostsList`를
-// 데이터 소스로 사용한다. 게시글 목록/작성/필터/정렬은 모두 클라이언트 메모리
-// 상의 목업 데이터에 대해 동작한다. 백엔드 커뮤니티 앱 신설은 이 스펙 범위 밖이다.
 import { useState, useEffect } from 'react';
+import { createCommunityPost, getCommunityPosts } from '../api/community';
 
-const mockPostsList = [
-    {
-        id: 1,
-        title: '메르세데스 5차 스킬 공략 공유합니다',
-        content: '오늘 메르세데스 5차 스킬 퀘스트를 클리어해서 팁 공유드립니다...',
-        category: 'guide',
-        author: '메르공략왕',
-        authorLevel: 250,
-        views: 1250,
-        likes: 45,
-        comments: 23,
-        createdAt: '2024-01-10 15:30',
-        isRecommended: true
-    },
-    {
-        id: 2,
-        title: '180렙 사냥터 어디가 좋을까요?',
-        content: '현재 180레벨 전사인데 사냥터 추천해주세요...',
-        category: 'question',
-        author: '초보전사',
-        authorLevel: 180,
-        views: 320,
-        likes: 12,
-        comments: 18,
-        createdAt: '2024-01-10 14:15'
-    },
-    {
-        id: 3,
-        title: '레전드리 장비 팝니다',
-        content: '캐시 아이템으로 레전드리 장비 정리합니다...',
-        category: 'trade',
-        author: '장비장수',
-        authorLevel: 200,
-        views: 890,
-        likes: 8,
-        comments: 15,
-        createdAt: '2024-01-10 13:20'
-    },
-    {
-        id: 4,
-        title: '우리 길드원 모집합니다!',
-        content: '활동적인 길드에 오실 분을 모집합니다...',
-        category: 'guild',
-        author: '길드마스터',
-        authorLevel: 260,
-        views: 450,
-        likes: 25,
-        comments: 32,
-        createdAt: '2024-01-10 12:00'
-    },
-    {
-        id: 5,
-        title: '오늘 업데이트 정말 좋네요',
-        content: '이번 업데이트로 인해서 게임이 훨씬 재밌어졌어요...',
-        category: 'free',
-        author: '메이플러버',
-        authorLevel: 195,
-        views: 670,
-        likes: 56,
-        comments: 41,
-        createdAt: '2024-01-10 11:45',
-        isRecommended: true
-    }
+const initialCategories = [
+    { id: 'all', name: '전체', count: 0 },
+    { id: 'free', name: '자유', count: 0 },
+    { id: 'question', name: '질문', count: 0 },
+    { id: 'guide', name: '공략', count: 0 },
+    { id: 'trade', name: '거래', count: 0 },
+    { id: 'guild', name: '길드', count: 0 }
 ];
 
 /**
@@ -101,21 +42,15 @@ export const filterAndSortPosts = (posts, category, sortBy) => {
     });
 };
 
-export const useCommunity = (user) => {
+export const useCommunity = () => {
     const [posts, setPosts] = useState([]);
-    const [mockPosts, setMockPosts] = useState(mockPostsList);
-    const [categories, setCategories] = useState([
-        { id: 'all', name: '전체', count: 0 },
-        { id: 'free', name: '자유', count: 0 },
-        { id: 'question', name: '질문', count: 0 },
-        { id: 'guide', name: '공략', count: 0 },
-        { id: 'trade', name: '거래', count: 0 },
-        { id: 'guild', name: '길드', count: 0 }
-    ]);
+    const [categories, setCategories] = useState(initialCategories);
     const [selectedCategory, setSelectedCategory] = useState('all');
     const [searchText, setSearchText] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
     const [sortBy, setSortBy] = useState('latest');
     const [isLoading, setIsLoading] = useState(true);
+    const [refreshKey, setRefreshKey] = useState(0);
     const [showWriteModal, setShowWriteModal] = useState(false);
     const [writeForm, setWriteForm] = useState({
         title: '',
@@ -124,58 +59,55 @@ export const useCommunity = (user) => {
     });
 
     useEffect(() => {
-        fetchPosts();
-    }, [selectedCategory, sortBy, mockPosts]);
+        let cancelled = false;
 
-    const fetchPosts = async () => {
-        setIsLoading(true);
-        try {
-            const sortedPosts = filterAndSortPosts(mockPosts, selectedCategory, sortBy);
+        const fetchPosts = async () => {
+            setIsLoading(true);
+            try {
+                const response = await getCommunityPosts({
+                    category: selectedCategory,
+                    sort: sortBy,
+                    search: searchQuery
+                });
+                if (cancelled) return;
 
-            setPosts(sortedPosts);
-
-            const categoryCounts = categories.map(cat => ({
-                ...cat,
-                count: cat.id === 'all' ? mockPosts.length : mockPosts.filter(post => post.category === cat.id).length
-            }));
-            setCategories(categoryCounts);
-        } catch (error) {
-            console.error('Failed to fetch posts:', error);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleSubmitPost = (e) => {
-        e.preventDefault();
-        const newPost = {
-            id: mockPosts.length + 1,
-            title: writeForm.title,
-            content: writeForm.content,
-            category: writeForm.category,
-            author: user?.nickname || user?.username || '익명',
-            authorLevel: user?.profile?.level || 100,
-            views: 0,
-            likes: 0,
-            comments: 0,
-            createdAt: new Date().toLocaleString('ko-KR', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit'
-            }).replace(/\./g, '-').replace(/:\s*$/, '')
+                setPosts(response.data.posts);
+                setCategories(current => current.map(category => ({
+                    ...category,
+                    count: response.data.categoryCounts[category.id] || 0
+                })));
+            } catch (error) {
+                if (!cancelled) console.error('Failed to fetch posts:', error);
+            } finally {
+                if (!cancelled) setIsLoading(false);
+            }
         };
 
-        setMockPosts([newPost, ...mockPosts]);
-        setShowWriteModal(false);
-        setWriteForm({ title: '', content: '', category: 'free' });
+        fetchPosts();
+        return () => {
+            cancelled = true;
+        };
+    }, [selectedCategory, sortBy, searchQuery, refreshKey]);
+
+    const handleSubmitPost = async (e) => {
+        e.preventDefault();
+        try {
+            await createCommunityPost(writeForm);
+            setShowWriteModal(false);
+            setWriteForm({ title: '', content: '', category: 'free' });
+            setSelectedCategory('all');
+            setSortBy('latest');
+            setSearchText('');
+            setSearchQuery('');
+            setRefreshKey(key => key + 1);
+        } catch (error) {
+            console.error('Failed to create post:', error);
+        }
     };
 
     const handleSearch = (e) => {
         e.preventDefault();
-        console.log('Searching for:', searchText);
-        // 실제 검색 로직은 백엔드 연동 시 추가
+        setSearchQuery(searchText.trim());
     };
 
     return {

@@ -26,6 +26,7 @@ urlpatterns = [
     path("api/v1/auth/", include("apps.auth.urls")),
     path("api/v1/chat/", include("apps.chat.urls")),
     path("api/v1/character/", include("apps.character.urls")),
+    path("api/v1/community/", include("apps.community.urls")),
 
     path("api/v1/core/", include("apps.core.urls")),
 

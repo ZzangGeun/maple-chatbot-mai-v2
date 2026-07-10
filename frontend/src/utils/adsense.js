@@ -25,4 +25,12 @@ export const isValidAdSenseClientId = (id) => {
   return /^ca-pub-\d+$/.test(trimmed);
 };
 
+export const isValidAdSenseSlotId = (id) => {
+  if (typeof id !== 'string') {
+    return false;
+  }
+
+  return /^\d+$/.test(id.trim());
+};
+
 export default isValidAdSenseClientId;
