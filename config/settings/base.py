@@ -27,6 +27,7 @@ LOCAL_APPS = [
     "apps.auth",
     "apps.character",
     "apps.chat",
+    "apps.community",
 ]
 
 THIRD_PARTY_APPS = [

@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { isValidAdSenseClientId } from '../../utils/adsense';
+import React, { useEffect, useRef } from 'react';
+import { isValidAdSenseClientId, isValidAdSenseSlotId } from '../../utils/adsense';
 
 const ADSENSE_SCRIPT_ID = 'google-adsense-script';
 
@@ -40,43 +40,77 @@ const ensureAdSenseScript = (clientId) => {
  * @param {string} [props.format='auto'] - 광고 형식 (기본값: 'auto')
  * @param {string} [props.responsive='true'] - 반응형 여부 (기본값: 'true')
  */
-const AdSense = ({ slot, style, format = 'auto', responsive = 'true' }) => {
-  const clientId = import.meta.env.VITE_ADSENSE_CLIENT_ID;
-  const isValid = isValidAdSenseClientId(clientId);
+const getAdSenseConfig = () => {
+  const runtimeConfig = typeof window !== 'undefined' ? window.__ADS_CONFIG__ : null;
+  if (runtimeConfig) {
+    return runtimeConfig;
+  }
+
+  return {
+    enabled: import.meta.env.VITE_ADSENSE_ENABLED !== 'false',
+    clientId: import.meta.env.VITE_ADSENSE_CLIENT_ID || '',
+    slots: {
+      leaderboard: import.meta.env.VITE_ADSENSE_SLOT_LEADERBOARD || '',
+      medium_rectangle: import.meta.env.VITE_ADSENSE_SLOT_MEDIUM_RECT || '',
+      skyscraper: import.meta.env.VITE_ADSENSE_SLOT_SKYSCRAPER || '',
+    },
+  };
+};
+
+const AdSense = ({
+  slot,
+  slotName,
+  className,
+  style,
+  format = 'auto',
+  responsive = 'true',
+}) => {
+  const config = getAdSenseConfig();
+  const clientId = config.clientId;
+  const resolvedSlot = slot || config.slots?.[slotName] || '';
+  const isValid = config.enabled === true
+    && isValidAdSenseClientId(clientId)
+    && isValidAdSenseSlotId(resolvedSlot);
+  const hasRequestedAd = useRef(false);
 
   useEffect(() => {
-    if (!isValid) {
+    if (!isValid || hasRequestedAd.current) {
       return;
     }
 
     try {
-      // 유효한 client id일 때만 스크립트를 주입하고 광고를 로드합니다.
       ensureAdSenseScript(clientId);
-      // window.adsbygoogle 배열에 빈 객체를 푸시하면 스크립트가 <ins> 태그를 찾아 광고를 채웁니다.
       (window.adsbygoogle = window.adsbygoogle || []).push({});
+      hasRequestedAd.current = true;
     } catch (e) {
       console.error('AdSense 로드 중 오류 발생:', e);
     }
   }, [isValid, clientId]);
 
-  // 유효한 client id가 없으면 스크립트/광고를 로드하지 않는다(요구사항 11.2).
   if (!isValid) {
     return null;
   }
 
-  if (!slot) {
-    return <div style={{ color: 'red' }}>AdSense Slot ID가 필요합니다.</div>;
-  }
-
-  return (
+  const adUnit = (
     <ins
       className="adsbygoogle"
       style={{ display: 'block', ...style }}
       data-ad-client={clientId}
-      data-ad-slot={slot}
+      data-ad-slot={resolvedSlot}
       data-ad-format={format}
       data-full-width-responsive={responsive}
     />
+  );
+
+  if (!className) {
+    return adUnit;
+  }
+
+  return (
+    <aside className={className} aria-label="광고">
+      <span className="ad-disclosure">광고</span>
+      {adUnit}
+    </aside>
   );
 };
 

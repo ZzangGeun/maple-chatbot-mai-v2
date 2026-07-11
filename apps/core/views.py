@@ -10,6 +10,7 @@ Django Ninja Router(core/api/views.py)를 이 파일로 통합합니다.
 
 import logging
 import os
+import json
 from typing import Any
 
 from django.conf import settings
@@ -41,7 +42,16 @@ def serve_react(request) -> HttpResponse:
             os.path.join(settings.BASE_DIR, "static", "dist", "index.html"),
             encoding="utf-8",
         ) as f:
-            return HttpResponse(f.read())
+            html = f.read()
+
+        ads_config = {
+            "enabled": settings.ADS_ENABLED and settings.ADS_PROVIDER == "adsense",
+            "clientId": settings.ADSENSE_CLIENT,
+            "slots": settings.ADS_SLOTS,
+        }
+        config_json = json.dumps(ads_config).replace("</", "<\\/")
+        runtime_config = f"<script>window.__ADS_CONFIG__ = {config_json};</script>"
+        return HttpResponse(html.replace("</head>", f"{runtime_config}</head>"))
     except FileNotFoundError:
         return HttpResponse(
             "React build not found. Please run 'npm run build' in frontend directory.",

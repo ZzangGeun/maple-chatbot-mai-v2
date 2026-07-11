@@ -46,7 +46,27 @@ PINECONE_ENVIRONMENT=us-west1-gcp
 JWT_SECRET_KEY=your-jwt-signing-secret-key
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=60
+
+# 8. Google AdSense
+ADS_ENABLED=True
+ADS_PROVIDER=adsense
+ADSENSE_CLIENT=ca-pub-1234567890123456
+ADS_SLOT_LEADERBOARD=1234567890
+ADS_SLOT_MEDIUM_RECT=2345678901
+ADS_SLOT_SKYSCRAPER=3456789012
 ```
+
+Vite 개발 서버만 단독으로 실행할 때는 `frontend/.env.local`에 아래 값을 설정합니다.
+
+```env
+VITE_ADSENSE_ENABLED=true
+VITE_ADSENSE_CLIENT_ID=ca-pub-1234567890123456
+VITE_ADSENSE_SLOT_LEADERBOARD=1234567890
+VITE_ADSENSE_SLOT_MEDIUM_RECT=2345678901
+VITE_ADSENSE_SLOT_SKYSCRAPER=3456789012
+```
+
+`ca-pub-*` 값은 AdSense 게시자 ID이며 슬롯 값은 각 광고 단위의 숫자 ID입니다. Django가 빌드된 React 앱을 제공하는 운영 환경에서는 `ADS_*` 설정이 런타임에 주입되므로 프론트엔드를 광고 ID마다 다시 빌드할 필요가 없습니다. 설정이 비활성화되어 있거나 ID 형식이 유효하지 않으면 광고 스크립트와 광고 영역을 렌더링하지 않습니다.
 
 ---
 

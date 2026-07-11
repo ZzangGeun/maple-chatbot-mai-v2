@@ -3,6 +3,7 @@ import Header from './Header';
 import Navigation from './Navigation';
 import LoginPopup from '../auth/LoginPopup';
 import SignupPopup from '../auth/SignupPopup';
+import AdSense from './AdSense';
 import '../../styles/globals/common.css';
 
 const Layout = ({ children, leftSidebar, rightSidebar, layoutClass }) => {
@@ -12,10 +13,15 @@ const Layout = ({ children, leftSidebar, rightSidebar, layoutClass }) => {
       <>
         <Header />
         <Navigation />
-        <div className={layoutClass || 'default-layout'}>
-          {leftSidebar && <aside className="layout-sidebar-left">{leftSidebar}</aside>}
-          <main className="layout-main-content">{children}</main>
-          {rightSidebar && <aside className="layout-sidebar-right">{rightSidebar}</aside>}
+        <AdSense
+          slotName="leaderboard"
+          className="global-ad global-ad--leaderboard"
+          style={{ minHeight: '90px' }}
+        />
+        <div className={`main-container ${layoutClass || 'default-layout'}`}>
+          {leftSidebar && <aside className="sidebar-left">{leftSidebar}</aside>}
+          <main className="main-content">{children}</main>
+          {rightSidebar && <aside className="sidebar-right">{rightSidebar}</aside>}
         </div>
         <LoginPopup />
         <SignupPopup />
@@ -28,6 +34,11 @@ const Layout = ({ children, leftSidebar, rightSidebar, layoutClass }) => {
     <>
       <Header />
       <Navigation />
+      <AdSense
+        slotName="leaderboard"
+        className="global-ad global-ad--leaderboard"
+        style={{ minHeight: '90px' }}
+      />
       {children}
       <LoginPopup />
       <SignupPopup />

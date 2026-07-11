@@ -2,7 +2,7 @@
 // Feature: frontend-integration-design-improvements, Property 10: AdSense는 유효한 client id일 때만 로드된다
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
-import { isValidAdSenseClientId } from './adsense';
+import { isValidAdSenseClientId, isValidAdSenseSlotId } from './adsense';
 
 // --- 스마트 제너레이터 ---
 
@@ -59,5 +59,22 @@ describe('isValidAdSenseClientId (Property 10)', () => {
       }),
       { numRuns: 100 },
     );
+  });
+});
+
+describe('isValidAdSenseSlotId', () => {
+  it('숫자로만 구성된 광고 슬롯 ID만 허용한다', () => {
+    fc.assert(
+      fc.property(fc.stringMatching(/^[0-9]+$/), (id) => {
+        expect(isValidAdSenseSlotId(id)).toBe(true);
+      }),
+      { numRuns: 100 },
+    );
+  });
+
+  it('빈 값, 플레이스홀더, 문자열이 아닌 값은 거부한다', () => {
+    expect(isValidAdSenseSlotId('')).toBe(false);
+    expect(isValidAdSenseSlotId('YOUR_SLOT_ID')).toBe(false);
+    expect(isValidAdSenseSlotId(1234567890)).toBe(false);
   });
 });
