@@ -6,17 +6,18 @@
 """
 
 import logging
-import json
 
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from apps.character.nexon import get_character_data
-from apps.character.services import generate_verification_code, verify_and_link_character
-
-
+from apps.character.services import (
+    generate_verification_code,
+    verify_and_link_character,
+)
 from common.schemas.response import ApiResponse
+from common.utils.request_helpers import parse_json_body
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,9 @@ async def character_search(request) -> JsonResponse:
 
         if not character_name:
             return JsonResponse(
-                ApiResponse.fail("캐릭터 이름을 입력해주세요.", code="NAME_REQUIRED").to_dict(),
+                ApiResponse.fail(
+                    "캐릭터 이름을 입력해주세요.", code="NAME_REQUIRED"
+                ).to_dict(),
                 status=400,
             )
 
@@ -44,7 +47,10 @@ async def character_search(request) -> JsonResponse:
 
         if not character_info:
             return JsonResponse(
-                ApiResponse.fail("캐릭터 정보를 찾을 수 없거나 가져오는 데 실패했습니다.", code="CHARACTER_NOT_FOUND").to_dict(),
+                ApiResponse.fail(
+                    "캐릭터 정보를 찾을 수 없거나 가져오는 데 실패했습니다.",
+                    code="CHARACTER_NOT_FOUND",
+                ).to_dict(),
                 status=404,
             )
 
@@ -59,7 +65,9 @@ async def character_search(request) -> JsonResponse:
     except Exception as e:
         logger.error(f"캐릭터 정보 조회 오류: {e!s}")
         return JsonResponse(
-            ApiResponse.fail("서버 오류가 발생했습니다.", code="SERVER_ERROR").to_dict(),
+            ApiResponse.fail(
+                "서버 오류가 발생했습니다.", code="SERVER_ERROR"
+            ).to_dict(),
             status=500,
         )
 
@@ -73,22 +81,33 @@ async def character_link(request) -> JsonResponse:
     """
     if not request.user.is_authenticated:
         return JsonResponse(
-            {"success": False, "error_code": "UNAUTHORIZED", "message": "로그인이 필요한 서비스입니다."},
+            {
+                "success": False,
+                "error_code": "UNAUTHORIZED",
+                "message": "로그인이 필요한 서비스입니다.",
+            },
             status=401,
         )
 
-    try:
-        body = json.loads(request.body)
-        character_name = body.get("character_name", "").strip()
-    except (json.JSONDecodeError, ValueError):
+    body, parse_error = parse_json_body(request)
+    if parse_error:
         return JsonResponse(
-            {"success": False, "error_code": "INVALID_BODY", "message": "요청 형식이 올바르지 않습니다."},
+            {
+                "success": False,
+                "error_code": "INVALID_BODY",
+                "message": "요청 형식이 올바르지 않습니다.",
+            },
             status=400,
         )
+    character_name = body.get("character_name", "").strip()
 
     if not character_name:
         return JsonResponse(
-            {"success": False, "error_code": "NAME_REQUIRED", "message": "캐릭터명을 입력해주세요."},
+            {
+                "success": False,
+                "error_code": "NAME_REQUIRED",
+                "message": "캐릭터명을 입력해주세요.",
+            },
             status=400,
         )
 
@@ -114,23 +133,34 @@ async def character_verify(request) -> JsonResponse:
     """
     if not request.user.is_authenticated:
         return JsonResponse(
-            {"success": False, "error_code": "UNAUTHORIZED", "message": "로그인이 필요한 서비스입니다."},
+            {
+                "success": False,
+                "error_code": "UNAUTHORIZED",
+                "message": "로그인이 필요한 서비스입니다.",
+            },
             status=401,
         )
 
-    try:
-        body = json.loads(request.body)
-        character_name = body.get("character_name", "").strip()
-        verification_code = body.get("verification_code", "").strip()
-    except (json.JSONDecodeError, ValueError):
+    body, parse_error = parse_json_body(request)
+    if parse_error:
         return JsonResponse(
-            {"success": False, "error_code": "INVALID_BODY", "message": "요청 형식이 올바르지 않습니다."},
+            {
+                "success": False,
+                "error_code": "INVALID_BODY",
+                "message": "요청 형식이 올바르지 않습니다.",
+            },
             status=400,
         )
+    character_name = body.get("character_name", "").strip()
+    verification_code = body.get("verification_code", "").strip()
 
     if not character_name or not verification_code:
         return JsonResponse(
-            {"success": False, "error_code": "FIELDS_REQUIRED", "message": "캐릭터명과 인증 코드를 모두 입력해주세요."},
+            {
+                "success": False,
+                "error_code": "FIELDS_REQUIRED",
+                "message": "캐릭터명과 인증 코드를 모두 입력해주세요.",
+            },
             status=400,
         )
 
@@ -159,7 +189,7 @@ async def character_verify(request) -> JsonResponse:
         }
         message = error_messages.get(error_code, "본인 인증에 실패했습니다.")
         status_code = status_codes.get(error_code, 400)
-        
+
         return JsonResponse(
             {"success": False, "error_code": error_code, "message": message},
             status=status_code,
@@ -173,5 +203,3 @@ async def character_verify(request) -> JsonResponse:
         },
         status=200,
     )
-
-

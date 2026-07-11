@@ -7,30 +7,22 @@ Django Ninja Router에서 표준 Django 뷰로 전환합니다.
 입력값 유효성 검사는 auth.schemas(Pydantic)가 담당합니다.
 """
 
-import json
 import logging
 
+from asgiref.sync import sync_to_async
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from asgiref.sync import sync_to_async
 from pydantic import ValidationError
 
 from apps.auth.models import UserProfile
 from apps.auth.schemas import LoginSchema, SignupSchema
 from apps.auth.services import create_user_with_profile, validate_signup_data
+from common.utils.request_helpers import parse_json_body
 
 logger = logging.getLogger(__name__)
-
-
-def _parse_json_body(request) -> dict:
-    """요청 바디에서 JSON을 파싱합니다."""
-    try:
-        return json.loads(request.body)
-    except (json.JSONDecodeError, ValueError):
-        return {}
 
 
 @csrf_exempt
@@ -44,7 +36,9 @@ async def signup(request) -> JsonResponse:
     - Pydantic 스키마에서 1차 유효성 검사(형식, 비밀번호 일치)
     - services.validate_signup_data에서 2차 검사(중복 여부 및 넥슨 캐릭터 본인확인)
     """
-    raw_data = _parse_json_body(request)
+    raw_data, parse_error = parse_json_body(request)
+    if parse_error:
+        return JsonResponse({"detail": "유효하지 않은 요청 형식입니다."}, status=400)
 
     # Pydantic으로 입력값 유효성 검사
     try:
@@ -100,7 +94,9 @@ async def login_view(request) -> JsonResponse:
 
     Django의 authenticate()로 자격증명을 확인하고 세션을 생성합니다.
     """
-    raw_data = _parse_json_body(request)
+    raw_data, parse_error = parse_json_body(request)
+    if parse_error:
+        return JsonResponse({"detail": "유효하지 않은 요청 형식입니다."}, status=400)
 
     try:
         data = LoginSchema(**raw_data)
@@ -114,9 +110,7 @@ async def login_view(request) -> JsonResponse:
     user_exists = await User.objects.filter(username=data.username).aexists()
     if not user_exists:
         logger.warning(f"로그인 실패 (존재하지 않는 아이디): {data.username}")
-        return JsonResponse(
-            {"detail": "존재하지 않는 아이디입니다."}, status=401
-        )
+        return JsonResponse({"detail": "존재하지 않는 아이디입니다."}, status=401)
 
     credentials = {
         "username": data.username,
@@ -126,9 +120,7 @@ async def login_view(request) -> JsonResponse:
 
     if user is None:
         logger.warning(f"로그인 실패 (비밀번호 불일치): {data.username}")
-        return JsonResponse(
-            {"detail": "비밀번호가 일치하지 않습니다."}, status=401
-        )
+        return JsonResponse({"detail": "비밀번호가 일치하지 않습니다."}, status=401)
 
     if not user.is_active:
         return JsonResponse({"detail": "비활성화된 계정입니다."}, status=401)

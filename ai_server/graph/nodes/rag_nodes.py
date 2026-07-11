@@ -16,21 +16,33 @@ from ai_server.rag.retriever import Retriever
 
 logger = logging.getLogger("RagNodes")
 
-# 모듈 레벨 초기화
-_retriever_instance = Retriever()
+# 지연 초기화 싱글턴: 임포트 시점이 아닌 최초 사용 시점에 DB에 연결합니다.
+_retriever_instance: Retriever | None = None
 MAX_DOC_CHARS = 1200
 MAX_CONTEXT_CHARS = 4000
 
 
-async def gemini_rewrite_node(state: RagState, config: RunnableConfig = None) -> dict:
+def _get_retriever() -> Retriever:
+    """Retriever 싱글턴을 지연 생성하여 반환합니다."""
+    global _retriever_instance
+    if _retriever_instance is None:
+        _retriever_instance = Retriever()
+    return _retriever_instance
+
+
+async def gemini_rewrite_node(
+    state: RagState, config: RunnableConfig | None = None
+) -> dict:
     """Gemini를 사용한 초고속 쿼리 재작성 노드"""
     llm = get_gemini_llm()
     messages = state["messages"]
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", get_prompt(PromptTemplate.REWRITE_SYSTEM, model="gemini")),
-        MessagesPlaceholder(variable_name="messages"),
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", get_prompt(PromptTemplate.REWRITE_SYSTEM, model="gemini")),
+            MessagesPlaceholder(variable_name="messages"),
+        ]
+    )
 
     chain = prompt | llm | StrOutputParser()
     new_query = await chain.ainvoke({"messages": messages}, config=config)
@@ -40,10 +52,15 @@ async def gemini_rewrite_node(state: RagState, config: RunnableConfig = None) ->
     return {"query": new_query}
 
 
-async def local_retrieve_node(state: RagState, config: RunnableConfig = None) -> dict:
+async def local_retrieve_node(
+    state: RagState, config: RunnableConfig | None = None
+) -> dict:
     """재작성된 쿼리로 RAG 벡터스토어에서 관련 문서를 검색합니다."""
     query = state["query"]
-    docs = await _retriever_instance.retriever.ainvoke(query, config=config)
+    retriever = _get_retriever().retriever
+    if retriever is None:
+        raise RuntimeError("Retriever가 초기화되지 않았습니다.")
+    docs = await retriever.ainvoke(query, config=config)
 
     context_parts = []
     for i, doc in enumerate(docs, 1):
@@ -59,22 +76,26 @@ async def local_retrieve_node(state: RagState, config: RunnableConfig = None) ->
 
         url_line = f"- **참고 링크**: {url}" if url else ""
 
-        context_part = "\n".join([
-            f"## [문서 {i}] {title}",
-            f"- **카테고리**: {category}",
-            f"- **출처**: {source}",
-            url_line,
-            "",
-            "**내용**:",
-            doc.page_content[:MAX_DOC_CHARS],
-            "",
-            "---",
-        ])
+        context_part = "\n".join(
+            [
+                f"## [문서 {i}] {title}",
+                f"- **카테고리**: {category}",
+                f"- **출처**: {source}",
+                url_line,
+                "",
+                "**내용**:",
+                doc.page_content[:MAX_DOC_CHARS],
+                "",
+                "---",
+            ]
+        )
         context_parts.append(context_part)
 
     context_text = "\n".join(context_parts)[:MAX_CONTEXT_CHARS]
     logger.info(f"[LocalRetrieve] {len(docs)}개 문서 검색 완료 | 쿼리: '{query}'")
     if docs:
-        logger.info(f"[LocalRetrieve] 첫 번째 문서 미리보기: {docs[0].page_content[:80]}...")
+        logger.info(
+            f"[LocalRetrieve] 첫 번째 문서 미리보기: {docs[0].page_content[:80]}..."
+        )
 
     return {"context": context_text}

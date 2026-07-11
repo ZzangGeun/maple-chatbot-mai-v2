@@ -9,6 +9,19 @@ Enum의 멤버는 오직 용도와 역할만으로 표현되도록 개선하였�
 
 from enum import Enum
 
+# ---------------------------------------------------------------------------
+# 일회성 RAG 질의(/api/v1/ai/query)용 단일 프롬프트 템플릿
+# {context}, {query} 플레이스홀더를 str.format으로 치환하여 사용합니다.
+# ---------------------------------------------------------------------------
+RAG_SINGLE_QUERY_PROMPT = (
+    "당신은 메이플스토리 도메인 지식이 매우 풍부한 친절한 AI 비서 '메이(MAI)'입니다.\n"
+    "아래 제공된 [가이드 컨텍스트]만을 바탕으로 질문에 정확하고 상세히 한국어로 답변해주세요.\n"
+    "만약 정보가 부족하거나 답변이 불가능한 경우, '공식 홈페이지나 인게임 정보를 다시 확인해주세요'라고 답변하세요.\n\n"
+    "[가이드 컨텍스트]\n{context}\n\n"
+    "질문: {query}\n"
+    "답변:"
+)
+
 
 class PromptTemplate(Enum):
     """
@@ -18,7 +31,7 @@ class PromptTemplate(Enum):
         {용도}_{역할}
         - 용도: CHAT / RAG / REWRITE / ROUTE / INTENT_EXTRACT
         - 역할: SYSTEM / HUMAN
-        
+
     각 멤버의 value는 딕셔너리이며, 키로는 'gemini'와 'local'을 가집니다.
     특정 모델에만 해당하는 역할이 있을 경우 다른 모델의 값은 빈 문자열("")로 정의합니다.
     """
@@ -43,10 +56,7 @@ class PromptTemplate(Enum):
 
     CHAT_HUMAN = {
         "gemini": "",
-        "local": (
-            "<|im_start|>assistant\n"
-            "<think>\n"
-        ),
+        "local": ("<|im_start|>assistant\n<think>\n"),
     }
 
     # -----------------------------------------------------------------------
@@ -64,7 +74,7 @@ class PromptTemplate(Enum):
             "\n"
             "주의사항:\n"
             "1. [Context]에 없는 내용은 절대 지어내지 마세요.\n"
-            "2. 정보가 없으면 \"지금은 알 수 없는 내용이담.\"이라고 솔직하게 말하세요.\n"
+            '2. 정보가 없으면 "지금은 알 수 없는 내용이담."이라고 솔직하게 말하세요.\n'
             "3. 친절하고 귀엽게 답변하세요.\n"
             "\n"
             "**답변 가이드라인**:\n"
@@ -90,10 +100,7 @@ class PromptTemplate(Enum):
 
     RAG_HUMAN = {
         "gemini": "",
-        "local": (
-            "<|im_start|>assistant\n"
-            "<think>\n"
-        ),
+        "local": ("<|im_start|>assistant\n<think>\n"),
     }
 
     # -----------------------------------------------------------------------
@@ -116,10 +123,7 @@ class PromptTemplate(Enum):
 
     REWRITE_HUMAN = {
         "gemini": "",
-        "local": (
-            "<|im_start|>assistant\n"
-            "명확한 질문: \n"
-        ),
+        "local": ("<|im_start|>assistant\n명확한 질문: \n"),
     }
 
     # -----------------------------------------------------------------------
@@ -152,11 +156,7 @@ class PromptTemplate(Enum):
 
     ROUTE_HUMAN = {
         "gemini": "",
-        "local": (
-            "<|im_start|>user\n"
-            "{question}<|im_end|>\n"
-            "<|im_start|>assistant\n"
-        ),
+        "local": ("<|im_start|>user\n{question}<|im_end|>\n<|im_start|>assistant\n"),
     }
 
     # -----------------------------------------------------------------------

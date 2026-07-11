@@ -181,6 +181,56 @@
    LAYOUT STYLES
 ============================================================================= */
 
+.default-layout,
+.narrow-layout,
+.chatbot-layout {
+    width: min(100%, 1800px);
+    margin: 0 auto;
+    padding: 16px;
+    box-sizing: border-box;
+}
+
+.default-layout,
+.narrow-layout {
+    display: block;
+}
+
+.layout-main-content {
+    min-width: 0;
+    width: 100%;
+}
+
+.narrow-layout .layout-main-content {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.chatbot-layout {
+    display: grid;
+    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(220px, 280px);
+    grid-template-areas: "sidebar-left main-content sidebar-right";
+    gap: 20px;
+    align-items: start;
+}
+
+.chatbot-layout .layout-sidebar-left {
+    grid-area: sidebar-left;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+}
+
+.chatbot-layout .layout-main-content {
+    grid-area: main-content;
+    min-width: 0;
+}
+
+.chatbot-layout .layout-sidebar-right {
+    grid-area: sidebar-right;
+    min-width: 0;
+}
+
 .main-container {
     max-width: 1800px;
     margin: 0 auto;
@@ -358,6 +408,16 @@
 ============================================================================= */
 
 @media (max-width: 1024px) {
+    .chatbot-layout {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+            "main-content"
+            "sidebar-left"
+            "sidebar-right";
+        gap: 16px;
+        padding: 12px;
+    }
+
     .main-container {
         grid-template-columns: 1fr;
         grid-template-areas:
@@ -398,6 +458,15 @@
     .main-container {
         padding: 15px;
         gap: 15px;
+    }
+
+    .default-layout,
+    .narrow-layout {
+        padding: 12px;
+    }
+
+    .narrow-layout .layout-main-content {
+        max-width: 100%;
     }
     
     .floating-send-btn {

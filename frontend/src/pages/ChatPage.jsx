@@ -44,23 +44,25 @@ const ChatPage = () => {
       rightSidebar={<ChatAdSidebar />}
       layoutClass="chatbot-layout"
     >
-      <div className="chat-header">
-        <div className="chat-title">MAI HELP YOU</div>
-        <div className="chat-subtitle">메이플스토리 AI 챗봇</div>
+      <div className="chat-main">
+        <div className="chat-header">
+          <div className="chat-title">MAI HELP YOU</div>
+          <div className="chat-subtitle">메이플스토리 AI 챗봇</div>
+        </div>
+
+        <ChatMessages 
+          messages={messages} 
+          isLoading={isLoading} 
+          messagesEndRef={messagesEndRef} 
+        />
+
+        <ChatInput 
+          onSend={sendMessage} 
+          isLoading={isLoading} 
+          currentSessionId={currentSessionId} 
+          initialMessage={location.state?.initialMessage} 
+        />
       </div>
-
-      <ChatMessages 
-        messages={messages} 
-        isLoading={isLoading} 
-        messagesEndRef={messagesEndRef} 
-      />
-
-      <ChatInput 
-        onSend={sendMessage} 
-        isLoading={isLoading} 
-        currentSessionId={currentSessionId} 
-        initialMessage={location.state?.initialMessage} 
-      />
     </Layout>
   );
 };

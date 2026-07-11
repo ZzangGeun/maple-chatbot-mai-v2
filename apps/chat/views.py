@@ -18,7 +18,11 @@ from apps.chat.services import stream_message_generator
 logger = logging.getLogger(__name__)
 
 
-from asgiref.sync import sync_to_async
+def _extract_message_content(request) -> str:
+    """요청 JSON에서 메시지 본문을 추출합니다."""
+    body = json.loads(request.body)
+    return body.get("message_content", "").strip() or body.get("content", "").strip()
+
 
 # ---------------------------------------------------------------------------
 # 세션 관련 엔드포인트
@@ -33,7 +37,12 @@ async def get_sessions(request) -> JsonResponse:
     """
     if request.user.is_authenticated:
         # filter는 sync, 하지만 비동기 반복 가능
-        sessions = [s async for s in ChatSession.objects.filter(user=request.user).order_by("-created_at")]
+        sessions = [
+            s
+            async for s in ChatSession.objects.filter(user=request.user).order_by(
+                "-created_at"
+            )
+        ]
     else:
         sessions = []
 
@@ -98,7 +107,12 @@ async def get_messages(request, session_id: str) -> JsonResponse:
     """
     session = await ChatSession.objects.aget_by_uuid_or_raise(session_id)
     # select_related를 통해 metadata 조인을 미리 수행합니다.
-    messages = [msg async for msg in session.messages.select_related('metadata').all().order_by("created_at")]
+    messages = [
+        msg
+        async for msg in session.messages.select_related("metadata")
+        .all()
+        .order_by("created_at")
+    ]
 
     message_list = []
     for msg in messages:
@@ -112,7 +126,11 @@ async def get_messages(request, session_id: str) -> JsonResponse:
                 }
             )
         elif msg.role == "assistant":
-            thinking = msg.metadata.thinking if hasattr(msg, 'metadata') and msg.metadata else ""
+            thinking = (
+                msg.metadata.thinking
+                if hasattr(msg, "metadata") and msg.metadata
+                else ""
+            )
             message_list.append(
                 {
                     "id": msg.id,
@@ -134,32 +152,46 @@ async def send_message(request, session_id: str) -> JsonResponse:
     session = await ChatSession.objects.aget_by_uuid_or_raise(session_id)
 
     try:
-        body = json.loads(request.body)
-        content = body.get("message_content", "").strip() or body.get("content", "").strip()
+        content = _extract_message_content(request)
     except (json.JSONDecodeError, ValueError):
-        return JsonResponse({"success": False, "error_code": "INVALID_FORMAT", "message": "유효하지 않은 요청 형식입니다."}, status=400)
+        return JsonResponse(
+            {
+                "success": False,
+                "error_code": "INVALID_FORMAT",
+                "message": "유효하지 않은 요청 형식입니다.",
+            },
+            status=400,
+        )
 
     if not content:
-        return JsonResponse({"success": False, "error_code": "CONTENT_REQUIRED", "message": "메시지 본문(message_content)이 유비되어야 합니다."}, status=400)
+        return JsonResponse(
+            {
+                "success": False,
+                "error_code": "CONTENT_REQUIRED",
+                "message": "메시지 본문(message_content)이 준비되어야 합니다.",
+            },
+            status=400,
+        )
 
     # 비즈니스 로직 호출
     from apps.chat.services import send_message_async
-    saved_msg, _ = await send_message_async(session, content)
+
+    user_msg, assistant_msg, _ = await send_message_async(session, content)
 
     return JsonResponse(
         {
             "success": True,
             "user_message": {
-                "id": saved_msg.id - 1, # 단순화를 위해 대략적인 ID 할당
+                "id": user_msg.id,
                 "sender_type": "user",
                 "message_content": content,
-                "sent_at": saved_msg.created_at.isoformat(),
+                "sent_at": user_msg.created_at.isoformat(),
             },
             "assistant_message": {
-                "id": saved_msg.id,
+                "id": assistant_msg.id,
                 "sender_type": "assistant",
-                "message_content": saved_msg.content,
-                "sent_at": saved_msg.created_at.isoformat(),
+                "message_content": assistant_msg.content,
+                "sent_at": assistant_msg.created_at.isoformat(),
             },
         },
         status=200,
@@ -173,7 +205,9 @@ async def delete_session(request, session_id: str) -> JsonResponse:
     """
     session = await ChatSession.objects.aget_by_uuid_or_raise(session_id)
     await session.adelete()
-    return JsonResponse({"success": True, "message": "대화방이 삭제되었습니다."}, status=200)
+    return JsonResponse(
+        {"success": True, "message": "대화방이 삭제되었습니다."}, status=200
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -220,11 +254,14 @@ async def stream_message(request, session_id: str) -> StreamingHttpResponse:
     session = await ChatSession.objects.aget_by_uuid_or_raise(session_id)
 
     try:
-        body = json.loads(request.body)
-        content = body.get("message_content", "").strip() or body.get("content", "").strip()
+        content = _extract_message_content(request)
     except (json.JSONDecodeError, ValueError):
         return JsonResponse({"error": "유효하지 않은 요청 형식입니다."}, status=400)
 
-    from apps.chat.services import stream_message_generator
+    if not content:
+        return JsonResponse(
+            {"error": "메시지 본문(message_content)이 준비되어야 합니다."}, status=400
+        )
+
     stream_generator = stream_message_generator(session, content)
     return StreamingHttpResponse(stream_generator, content_type="text/event-stream")

@@ -1,23 +1,29 @@
 import json
 import logging
+from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage
 
-from ai_server.schemas.chat import QueryRequest
+from ai_server.api.deps import get_graph
+from ai_server.schemas.chat import ChatResponse, QueryRequest
 from ai_server.services.chat import build_langchain_config, parse_thinking_response
 
 logger = logging.getLogger("AI_Server.ChatRouter")
 router = APIRouter()
 
-@router.post("/generate")
-async def generate_response(request: QueryRequest, raw_request: Request) -> dict:
+# lifespan에서 app.state에 바인딩된 컴파일된 LangGraph를 주입받는 타입 별칭
+Graph = Annotated[Any, Depends(get_graph)]
+
+
+@router.post("/generate", response_model=ChatResponse)
+async def generate_response(request: QueryRequest, graph: Graph) -> ChatResponse:
     """
     동기 방식 AI 답변 생성 엔드포인트.
 
     Returns:
-        {"response": 최종 답변, "thinking": 사고 과정(있을 경우)}
+        ChatResponse: 최종 답변(response)과 사고 과정(thinking).
     """
     try:
         logger.info(f"요청 수신 (Session: {request.session_id}): {request.message}")
@@ -25,7 +31,7 @@ async def generate_response(request: QueryRequest, raw_request: Request) -> dict
         config = build_langchain_config(request.session_id)
         input_message = HumanMessage(content=request.message)
 
-        output = await raw_request.app.state.graph.ainvoke(
+        output = await graph.ainvoke(
             {"messages": [input_message]},
             config=config,
         )
@@ -33,7 +39,7 @@ async def generate_response(request: QueryRequest, raw_request: Request) -> dict
         ai_full_response = output["messages"][-1].content
         thinking, answer = parse_thinking_response(ai_full_response)
 
-        return {"response": answer, "thinking": thinking}
+        return ChatResponse(response=answer, thinking=thinking)
 
     except ValueError as e:
         logger.error(f"값 오류 발생: {e}")
@@ -44,9 +50,7 @@ async def generate_response(request: QueryRequest, raw_request: Request) -> dict
 
 
 @router.post("/stream")
-async def stream_response(
-    request: QueryRequest, raw_request: Request
-) -> StreamingResponse:
+async def stream_response(request: QueryRequest, graph: Graph) -> StreamingResponse:
     """
     SSE(Server-Sent Events) 스트리밍 답변 생성 엔드포인트.
 
@@ -62,7 +66,7 @@ async def stream_response(
 
         async def event_generator():
             try:
-                async for event in raw_request.app.state.graph.astream_events(
+                async for event in graph.astream_events(
                     {"messages": [input_message]},
                     config=config,
                     version="v2",

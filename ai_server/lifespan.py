@@ -16,7 +16,6 @@ Shutdown 핸들러:
 
 import inspect
 import logging
-import os
 from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from typing import Any, Awaitable, Union
@@ -112,7 +111,9 @@ _SHUTDOWN_HANDLERS: list[tuple[str, _HandlerFn]] = [
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """FastAPI 애플리케이션 라이프사이클 컨텍스트 매니저."""
-    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+    from ai_server.config import settings
+
+    redis_url = settings.redis_url
     logger.info("LangGraph 체크포인트를 위한 Redis 연결 시도: %s", redis_url)
 
     try:

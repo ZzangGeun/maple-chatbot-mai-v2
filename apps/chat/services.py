@@ -8,38 +8,46 @@
 import json
 import logging
 import time
-import uuid
 
 import aiohttp
-import requests
 from django.conf import settings
 
-from apps.chat.models import ChatSession, ChatMessage
+from apps.chat.models import ChatMessage, ChatSession
 from common.exceptions.chat import AiServerUnavailable
 
 logger = logging.getLogger(__name__)
 
-def get_ai_url():
-    _AI_BASE = getattr(settings, "AI_SERVER_BASE_URL", "http://127.0.0.1:8001")
-    return f"{_AI_BASE}/generate", f"{_AI_BASE}/stream"
+AI_REQUEST_TIMEOUT_SEC = 120
+AI_STREAM_TIMEOUT_SEC = 60
 
 
-async def send_message_async(session: ChatSession, content: str) -> tuple[ChatMessage, dict]:
+def get_ai_urls() -> tuple[str, str]:
+    """AI 서버 generate/stream 엔드포인트 URL을 반환합니다."""
+    ai_base = getattr(settings, "AI_SERVER_BASE_URL", "http://127.0.0.1:8001").rstrip(
+        "/"
+    )
+    return f"{ai_base}/generate", f"{ai_base}/stream"
+
+
+async def send_message_async(
+    session: ChatSession, content: str
+) -> tuple[ChatMessage, ChatMessage, dict]:
     """
     AI 서버로 메시지를 비동기 전송하고 DB에 저장합니다.
     """
     from apps.chat.models import MessageMetadata
-    
+
     start_time = time.time()
     payload = {"session_id": str(session.session_id), "message": content}
 
     ai_text = ""
     ai_thinking = ""
-    generate_url, _ = get_ai_url()
+    generate_url, _ = get_ai_urls()
 
     try:
-        async with aiohttp.ClientSession() as client:
-            async with client.post(generate_url, json=payload, timeout=120) as response:
+        timeout = aiohttp.ClientTimeout(total=AI_REQUEST_TIMEOUT_SEC)
+        async with aiohttp.ClientSession(timeout=timeout) as client:
+            async with client.post(generate_url, json=payload) as response:
                 if response.status == 200:
                     ai_data = await response.json()
                     ai_text = ai_data.get("response", "")
@@ -51,6 +59,9 @@ async def send_message_async(session: ChatSession, content: str) -> tuple[ChatMe
 
     except aiohttp.ClientError as e:
         logger.error(f"AI 서버 연결 실패: {e}")
+        raise AiServerUnavailable()
+    except TimeoutError:
+        logger.error("AI 서버 응답 타임아웃")
         raise AiServerUnavailable()
 
     response_time = int((time.time() - start_time) * 1000)
@@ -67,11 +78,9 @@ async def send_message_async(session: ChatSession, content: str) -> tuple[ChatMe
         role="assistant",
         content=ai_text,
     )
-    
+
     await MessageMetadata.objects.acreate(
-        message=assistant_msg,
-        thinking=ai_thinking,
-        response_time_ms=response_time
+        message=assistant_msg, thinking=ai_thinking, response_time_ms=response_time
     )
 
     result_dict = {
@@ -89,7 +98,7 @@ async def send_message_async(session: ChatSession, content: str) -> tuple[ChatMe
         },
     }
 
-    return assistant_msg, result_dict
+    return user_msg, assistant_msg, result_dict
 
 
 async def stream_message_generator(session: ChatSession, content: str):
@@ -102,7 +111,7 @@ async def stream_message_generator(session: ChatSession, content: str):
         role="user",
         content=content,
     )
-    
+
     assistant_msg = await ChatMessage.objects.acreate(
         session=session,
         role="assistant",
@@ -111,13 +120,17 @@ async def stream_message_generator(session: ChatSession, content: str):
 
     ai_accumulated_text: list[str] = []
     payload = {"session_id": str(session.session_id), "message": content}
-    _, stream_url = get_ai_url()
+    _, stream_url = get_ai_urls()
 
     try:
-        async with aiohttp.ClientSession() as client:
-            async with client.post(stream_url, json=payload, timeout=60) as r:
+        timeout = aiohttp.ClientTimeout(total=AI_STREAM_TIMEOUT_SEC)
+        async with aiohttp.ClientSession(timeout=timeout) as client:
+            async with client.post(stream_url, json=payload) as r:
                 if r.status != 200:
-                    error_msg = {"type": "error", "content": f"AI Server Error: {r.status}"}
+                    error_msg = {
+                        "type": "error",
+                        "content": f"AI Server Error: {r.status}",
+                    }
                     yield f"data: {json.dumps(error_msg)}\n\n"
                     return
 
@@ -126,7 +139,7 @@ async def stream_message_generator(session: ChatSession, content: str):
                         decoded_line = line.decode("utf-8").strip()
                         if not decoded_line:
                             continue
-                        
+
                         yield decoded_line + "\n\n"
 
                         if decoded_line.startswith("data: "):
@@ -136,10 +149,15 @@ async def stream_message_generator(session: ChatSession, content: str):
                                     continue
                                 chunk_data = json.loads(json_str)
                                 if chunk_data.get("type") == "token":
-                                    ai_accumulated_text.append(chunk_data.get("content", ""))
+                                    ai_accumulated_text.append(
+                                        chunk_data.get("content", "")
+                                    )
                             except Exception as e:
                                 logger.debug(f"스트리밍 JSON 파싱 에러: {e}")
 
+    except TimeoutError:
+        logger.error("AI 서버 스트리밍 응답 타임아웃")
+        yield f"data: {json.dumps({'type': 'error', 'content': 'AI 서버 응답이 지연되고 있습니다.'})}\n\n"
     except Exception as e:
         logger.error(f"AI 서버 통신 중 오류 발생: {e}")
         yield f"data: {json.dumps({'type': 'error', 'content': 'AI 서버 통신 중 오류가 발생했습니다.'})}\n\n"
@@ -148,6 +166,6 @@ async def stream_message_generator(session: ChatSession, content: str):
     final_text = "".join(ai_accumulated_text)
     try:
         assistant_msg.content = final_text
-        await assistant_msg.asave(update_fields=['content'])
+        await assistant_msg.asave(update_fields=["content"])
     except Exception as e:
         logger.error(f"스트리밍 DB 업데이트 실패: {e}")

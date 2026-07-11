@@ -26,7 +26,7 @@ const CharacterPage = () => {
 
     return (
         <Layout layoutClass="narrow-layout">
-            <div className="main-content">
+            <div className="character-page-content">
                 <CharacterSearchForm 
                     searchName={searchName}
                     setSearchName={setSearchName}
