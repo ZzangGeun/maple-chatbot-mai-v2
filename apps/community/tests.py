@@ -56,3 +56,14 @@ class CommunityPostApiTest(TestCase):
         )
 
         self.assertEqual(response.status_code, 401)
+
+    def test_invalid_json_cannot_create_post(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            self.url,
+            data="not-json",
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)

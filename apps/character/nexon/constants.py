@@ -7,7 +7,7 @@ API 엔드포인트 추가/변경 시 이 파일만 수정하면 됩니다.
 """
 
 from datetime import timedelta
-from django.conf import settings
+
 from common.constants.api import NEXON_BASE_URL
 
 # 넥슨 Open API 베이스 URL (common.constants 참조)
@@ -15,9 +15,6 @@ BASE_URL = NEXON_BASE_URL
 
 # 캐릭터 정보 캐시 유효 기간
 CACHE_DURATION = timedelta(hours=1)
-
-# API 키는 settings에서 로드합니다.
-NEXON_API_KEY: str | None = getattr(settings, "NEXON_API_KEY", None)
 
 # 엔드포인트 키 → 경로 매핑
 # 키 이름은 character_service.py의 딕셔너리 참조 키와 동일합니다.

@@ -1,6 +1,9 @@
+import asyncio
 import json
 import logging
 from typing import Optional
+
+import aiohttp
 from pydantic import BaseModel, Field
 
 from langchain_core.prompts import ChatPromptTemplate
@@ -91,13 +94,12 @@ async def nexon_api_tool_node(state: NexonState) -> dict:
         summary = await _nexon_client.get_character_summary(character_name)
         context = _format_character_context(character_name, summary)
 
-    except Exception as e:
-        # 넥슨 API 장애 상황이나 429 Rate Limit 상황 시 에러 세부 내용을 담아 뷰어에 전달합니다.
+    except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, RuntimeError) as e:
         logger.error(f"[NexonAPI] 캐릭터 '{character_name}' API 호출 실패: {e}")
         context = (
             f"## 캐릭터 조회 오류\n"
-            f"'{character_name}' 캐릭터 정보를 가져오는 데 실패했습니다.\n"
-            f"오류 내용: {e}"
+            f"'{character_name}' 캐릭터 정보를 가져오는 데 실패했습니다. "
+            "잠시 후 다시 시도해주세요."
         )
 
     return {"context": context}

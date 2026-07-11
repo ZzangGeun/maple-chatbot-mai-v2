@@ -18,7 +18,7 @@ styles/
 │
 ├── components/                 # 컴포넌트별 스타일
 │   ├── auth.css                # 인증 관련 (Login, Signup 팝업)
-│   └── common.css              # (현재 import되는 곳 없음 — 미사용)
+│   └── common.css              # 사이드바 프로필/채팅 기록 등 (ChatSidebar.jsx 등에서 import)
 │
 ├── pages/                      # 페이지별 스타일
 │   ├── home.css                # 홈 페이지 스타일

@@ -1,6 +1,6 @@
 # ai_server/graph/tools/nexon_api_tool.py
 """
-넥슨 메이플스토리 Open API 클라이언트 (뼈대)
+넥슨 메이플스토리 Open API 클라이언트
 
 담당 역할:
   - 캐릭터 식별자(ocid) 조회
@@ -15,25 +15,23 @@
 환경변수:
   NEXON_API_KEY — 넥슨 Open API 발급 키 (코드에 절대 하드코딩 금지)
 
-TODO:
-  - 각 메서드에 실제 API 호출 로직 구현
-  - 응답 데이터를 Pydantic 모델로 구조화
-  - Rate limit(429) 재시도 로직 추가
 """
 
+import asyncio
 import logging
 from typing import Any
 
 import aiohttp
 
 from ai_server.config import settings
+from common.constants.api import NEXON_BASE_URL
 
 logger = logging.getLogger("NexonAPIClient")
 
-from common.constants.api import NEXON_BASE_URL
-
-# 넥슨 Open API 베이스 URL
 _BASE_URL = NEXON_BASE_URL
+_MAX_RETRIES = 3
+_INITIAL_RETRY_DELAY_SECONDS = 1.0
+_REQUEST_TIMEOUT_SECONDS = 10
 
 
 class NexonAPIClient:
@@ -52,53 +50,53 @@ class NexonAPIClient:
         # 모든 요청에 공통으로 사용하는 인증 헤더
         self._headers: dict[str, str] = {
             "x-nxopen-api-key": self._api_key,
+            "User-Agent": "MAI-Help-You-AI/1.0",
         }
 
-    # ------------------------------------------------------------------
-    # 내부 유틸
-    # ------------------------------------------------------------------
-
-    async def get_session(self) -> aiohttp.ClientSession:
-        if not hasattr(self, "_session") or self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession(headers=self._headers)
-        return self._session
-
-    async def close(self) -> None:
-        if hasattr(self, "_session") and self._session and not self._session.closed:
-            await self._session.close()
-
     async def _get(self, endpoint: str, params: dict[str, Any] | None = None) -> dict:
-        """
-        GET 요청을 비동기로 수행합니다.
+        """GET 요청을 재시도 정책과 함께 비동기로 수행합니다."""
+        if not self._api_key:
+            raise ValueError("NEXON_API_KEY가 설정되지 않았습니다.")
 
-        Args:
-            endpoint: 베이스 URL 이후 경로 (예: "/id")
-            params  : 쿼리 파라미터
-
-        Returns:
-            파싱된 JSON 딕셔너리.
-
-        Raises:
-            aiohttp.ClientResponseError: 4xx/5xx 응답 시.
-        """
         url = f"{_BASE_URL}{endpoint}"
-        session = await self.get_session()
-        async with session.get(url, params=params) as response:
-            # 429(Rate Limit), 500(서버 오류) 등을 명시적으로 처리합니다.
-            if response.status == 429:
-                logger.warning("넥슨 API Rate Limit 초과. 잠시 후 재시도 하세요.")
-                raise aiohttp.ClientResponseError(
-                    response.request_info,
-                    response.history,
-                    status=429,
-                    message="Too Many Requests",
-                )
-            response.raise_for_status()
-            return await response.json()
+        timeout = aiohttp.ClientTimeout(total=_REQUEST_TIMEOUT_SECONDS)
+        delay = _INITIAL_RETRY_DELAY_SECONDS
 
-    # ------------------------------------------------------------------
-    # 공개 API 메서드
-    # ------------------------------------------------------------------
+        async with aiohttp.ClientSession(
+            headers=self._headers,
+            timeout=timeout,
+        ) as session:
+            for attempt in range(1, _MAX_RETRIES + 1):
+                try:
+                    async with session.get(url, params=params) as response:
+                        if response.status == 200:
+                            return await response.json()
+
+                        retryable = response.status == 429 or 500 <= response.status < 600
+                        if retryable and attempt < _MAX_RETRIES:
+                            logger.warning(
+                                "Nexon API HTTP %d. %d/%d차 요청 재시도",
+                                response.status,
+                                attempt,
+                                _MAX_RETRIES,
+                            )
+                            await asyncio.sleep(delay)
+                            delay *= 2
+                            continue
+
+                        response.raise_for_status()
+                except (aiohttp.ClientConnectionError, asyncio.TimeoutError):
+                    if attempt == _MAX_RETRIES:
+                        raise
+                    logger.warning(
+                        "Nexon API 네트워크 오류. %d/%d차 요청 재시도",
+                        attempt,
+                        _MAX_RETRIES,
+                    )
+                    await asyncio.sleep(delay)
+                    delay *= 2
+
+        raise RuntimeError("Nexon API 요청이 응답 없이 종료되었습니다.")
 
     async def get_ocid(self, character_name: str) -> str:
         """
@@ -112,11 +110,18 @@ class NexonAPIClient:
         Returns:
             ocid 문자열.
         """
-        # TODO: 실제 API 호출 구현
-        # data = await self._get("/id", params={"character_name": character_name})
-        # return data["ocid"]
-        logger.info(f"[TODO] get_ocid 호출: character_name={character_name}")
-        return "SKELETON_OCID"
+        normalized_name = character_name.strip()
+        if not normalized_name:
+            raise ValueError("캐릭터명이 비어 있습니다.")
+
+        data = await self._get(
+            "/id",
+            params={"character_name": normalized_name},
+        )
+        ocid = data.get("ocid")
+        if not ocid:
+            raise ValueError(f"캐릭터 '{normalized_name}'의 OCID를 찾을 수 없습니다.")
+        return ocid
 
     async def get_character_basic(self, ocid: str) -> dict:
         """
@@ -129,15 +134,9 @@ class NexonAPIClient:
         Returns:
             캐릭터 기본 정보 딕셔너리.
         """
-        # TODO: 실제 API 호출 구현
-        # return await self._get("/character/basic", params={"ocid": ocid})
-        logger.info(f"[TODO] get_character_basic 호출: ocid={ocid}")
-        return {
-            "character_name": "SKELETON_NAME",
-            "character_level": 0,
-            "character_class": "SKELETON_CLASS",
-            "world_name": "SKELETON_WORLD",
-        }
+        if not ocid:
+            raise ValueError("OCID가 비어 있습니다.")
+        return await self._get("/character/basic", params={"ocid": ocid})
 
     async def get_character_stat(self, ocid: str) -> dict:
         """
@@ -150,10 +149,9 @@ class NexonAPIClient:
         Returns:
             캐릭터 스탯 딕셔너리.
         """
-        # TODO: 실제 API 호출 구현
-        # return await self._get("/character/stat", params={"ocid": ocid})
-        logger.info(f"[TODO] get_character_stat 호출: ocid={ocid}")
-        return {"final_stat": []}
+        if not ocid:
+            raise ValueError("OCID가 비어 있습니다.")
+        return await self._get("/character/stat", params={"ocid": ocid})
 
     async def get_character_item_equipment(self, ocid: str) -> dict:
         """
@@ -165,10 +163,12 @@ class NexonAPIClient:
         Returns:
             장착 아이템 리스트 딕셔너리.
         """
-        # TODO: 실제 API 호출 구현
-        # return await self._get("/character/item-equipment", params={"ocid": ocid})
-        logger.info(f"[TODO] get_character_item_equipment 호출: ocid={ocid}")
-        return {"item_equipment": []}
+        if not ocid:
+            raise ValueError("OCID가 비어 있습니다.")
+        return await self._get(
+            "/character/item-equipment",
+            params={"ocid": ocid},
+        )
 
     async def get_character_summary(self, character_name: str) -> dict:
         """
@@ -182,20 +182,9 @@ class NexonAPIClient:
         Returns:
             {"basic": {...}, "stat": {...}} 형태의 통합 딕셔너리.
         """
-        try:
-            ocid = await self.get_ocid(character_name)
-            basic = await self.get_character_basic(ocid)
-            stat = await self.get_character_stat(ocid)
-            return {"basic": basic, "stat": stat}
-        except aiohttp.ClientResponseError as e:
-            logger.error(f"넥슨 API 오류 (status={e.status}): {e.message}")
-            raise
-        except (aiohttp.ClientConnectionError, TimeoutError) as e:
-            logger.error(f"넥슨 API 네트워크 연결 또는 타임아웃 오류: {e}")
-            raise
-        except ValueError as e:
-            logger.error(f"캐릭터 정보 처리 중 값 오류: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"캐릭터 조회 중 예상치 못한 오류: {e}")
-            raise
+        ocid = await self.get_ocid(character_name)
+        basic, stat = await asyncio.gather(
+            self.get_character_basic(ocid),
+            self.get_character_stat(ocid),
+        )
+        return {"basic": basic, "stat": stat}

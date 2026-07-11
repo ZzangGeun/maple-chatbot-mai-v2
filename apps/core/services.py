@@ -1,21 +1,22 @@
-from django.conf import settings
-import logging
 import json
-import os
-from datetime import datetime, timedelta
-from asgiref.sync import async_to_sync
-from common.utils.api_client import get_api_data
-from bs4 import BeautifulSoup
+import logging
 import time
+
 import redis
+from asgiref.sync import async_to_sync
+from bs4 import BeautifulSoup
+from django.conf import settings
+
+from common.utils.api_client import get_api_data
 
 logger = logging.getLogger(__name__)
 
 # Redis 연결 설정
-REDIS_URL = getattr(settings, 'REDIS_URL', 'redis://127.0.0.1:6379/0')
+REDIS_URL = getattr(settings, "REDIS_URL", "redis://127.0.0.1:6379/0")
 redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 
 CACHE_DURATION = 3600  # 캐시 유효 기간 설정 (초 단위: 1시간)
+
 
 def save_data_to_redis(key: str, data: dict | list) -> None:
     """Redis에 데이터를 캐싱하는 제네릭 함수"""
@@ -40,22 +41,22 @@ def load_data_from_redis(key: str) -> dict | list | None:
 # 도메인별 Redis 캐시 접근 래핑 함수 (views.py에서 import하기 위한 별칭)
 def load_notice_data_from_redis() -> dict | None:
     """Redis에서 공지사항 캐시 데이터를 불러옵니다."""
-    return load_data_from_redis('cache:notice_list')
+    return load_data_from_redis("cache:notice_list")
 
 
 def load_ranking_data_from_redis() -> dict | None:
     """Redis에서 랭킹 캐시 데이터를 불러옵니다."""
-    return load_data_from_redis('cache:ranking_list')
+    return load_data_from_redis("cache:ranking_list")
 
 
 def save_notice_data_to_redis(data: dict) -> None:
     """공지사항 데이터를 Redis에 캐싱합니다."""
-    save_data_to_redis('cache:notice_list', data)
+    save_data_to_redis("cache:notice_list", data)
 
 
 def save_ranking_data_to_redis(data: dict) -> None:
     """랭킹 데이터를 Redis에 캐싱합니다."""
-    save_data_to_redis('cache:ranking_list', data)
+    save_data_to_redis("cache:ranking_list", data)
 
 
 def get_notice_list() -> dict:
@@ -63,8 +64,7 @@ def get_notice_list() -> dict:
     공지사항 데이터를 Nexon API에서 가져와서 Redis에 캐시하고 반환합니다.
     캐시가 있고 최신이면(1시간 이내) API 호출 없이 캐시 데이터를 반환합니다.
     """
-    cache_key = 'cache:notice_list'
-    cached_data = load_data_from_redis(cache_key)
+    cached_data = load_notice_data_from_redis()
     if cached_data:
         logger.info("Redis에 캐시된 공지사항 데이터를 사용합니다.")
         return cached_data
@@ -81,10 +81,10 @@ def get_notice_list() -> dict:
         "notice_general": notice_general,
         "notice_event": notice_event,
         "notice_cashshop": notice_cashshop,
-        "notice_update": notice_update
+        "notice_update": notice_update,
     }
-    
-    save_data_to_redis(cache_key, notice_data)
+
+    save_notice_data_to_redis(notice_data)
 
     return notice_data
 
@@ -94,66 +94,28 @@ def get_ranking_list() -> dict:
     랭킹 데이터를 Nexon API에서 가져와서 Redis에 캐시하고 반환합니다.
     상위 50위까지만 저장합니다.
     """
-    cache_key = 'cache:ranking_list'
-    cached_data = load_data_from_redis(cache_key)
+    cached_data = load_ranking_data_from_redis()
     if cached_data:
         logger.info("Redis에 캐시된 랭킹 데이터를 사용합니다.")
         return cached_data
 
     _get_api_data = async_to_sync(get_api_data)
     overall_ranking = _get_api_data("/ranking/overall")
-    
+
     # JSON 구조: overall_ranking -> ranking 배열
     ranking_list = []
     if overall_ranking and isinstance(overall_ranking, dict):
-        ranking_list = overall_ranking.get('ranking', [])
+        ranking_list = overall_ranking.get("ranking", [])
     elif isinstance(overall_ranking, list):
         ranking_list = overall_ranking
-    
+
     # 상위 50위까지만 저장
     ranking_list = ranking_list[:50] if ranking_list else []
-    
-    ranking_data = {
-        "overall_ranking": ranking_list
-    }
-    
-    save_data_to_redis(cache_key, ranking_data)
-    
-    return ranking_data
 
+    ranking_data = {"overall_ranking": ranking_list}
 
-def get_ranking_list() -> dict:
-    """
-    랭킹 데이터를 Nexon API에서 가져와서 Redis에 캐시하고 반환합니다.
-    상위 50위까지만 저장합니다.
-
-    Returns:
-        dict: overall_ranking 키를 포함한 랭킹 데이터
-    """
-    cached_data = load_ranking_data_from_redis()
-    if cached_data:
-        logger.info("Redis에 캐시된 랭킹 데이터를 사용합니다.")
-        return cached_data
-
-    overall_ranking = get_api_data("/ranking/overall")
-    
-    # JSON 구조: overall_ranking -> ranking 배열
-    ranking_list = []
-    if overall_ranking and isinstance(overall_ranking, dict):
-        ranking_list = overall_ranking.get('ranking', [])
-    elif isinstance(overall_ranking, list):
-        ranking_list = overall_ranking
-    
-    # 상위 50위까지만 저장
-    ranking_list = ranking_list[:50] if ranking_list else []
-    
-    ranking_data = {
-        "overall_ranking": ranking_list
-    }
-    
-    # Redis에 캐시 저장
     save_ranking_data_to_redis(ranking_data)
-    
+
     return ranking_data
 
 
@@ -178,8 +140,8 @@ def get_notice_detail(endpoint: str, notice_id: int) -> str:
 
             if raw_content:
                 # HTML 태그 제거
-                soup = BeautifulSoup(raw_content, 'html.parser')
-                content = soup.get_text(separator='\n').strip()
+                soup = BeautifulSoup(raw_content, "html.parser")
+                content = soup.get_text(separator="\n").strip()
                 return content
             else:
                 logger.warning(
@@ -211,10 +173,10 @@ def sync_notices_to_rag() -> bool:
 
     # 처리할 카테고리 정의 (리스트 엔드포인트 키 : 상세 엔드포인트 경로 : 아이템 리스트 키)
     categories = [
-        ('notice_general', '/notice/detail', 'notice'),
-        ('notice_event', '/notice-event/detail', 'event_notice'),
-        ('notice_cashshop', '/notice-cashshop/detail', 'cashshop_notice'),
-        ('notice_update', '/notice-update/detail', 'update_notice')
+        ("notice_general", "/notice/detail", "notice"),
+        ("notice_event", "/notice-event/detail", "event_notice"),
+        ("notice_cashshop", "/notice-cashshop/detail", "cashshop_notice"),
+        ("notice_update", "/notice-update/detail", "update_notice"),
     ]
 
     for cat_key, detail_endpoint, item_key in categories:
@@ -224,10 +186,10 @@ def sync_notices_to_rag() -> bool:
         logger.info(f"{cat_key} 카테고리 처리 중... ({len(items)}건)")
 
         for item in items:
-            title = item.get('title', '제목 없음')
-            notice_id = item.get('notice_id')
-            url = item.get('url', '')
-            date_str = item.get('date', '')
+            title = item.get("title", "제목 없음")
+            notice_id = item.get("notice_id")
+            url = item.get("url", "")
+            date_str = item.get("date", "")
 
             if not notice_id:
                 logger.warning(f"notice_id 누락: {title}")
@@ -244,25 +206,27 @@ def sync_notices_to_rag() -> bool:
             # RAG 형식으로 구성
             doc = {
                 "title": f"[{cat_key.replace('notice_', '')}] {title}",
-                "content": content if content else f"본문 내용을 가져올 수 없습니다. 링크를 확인하세요: {url}",
+                "content": content
+                if content
+                else f"본문 내용을 가져올 수 없습니다. 링크를 확인하세요: {url}",
                 "content_type": "notice",
                 "source": url,
                 "metadata": {
                     "category": cat_key,
                     "date": date_str,
                     "notice_id": notice_id,
-                    "original_title": title
-                }
+                    "original_title": title,
+                },
             }
             rag_docs.append(doc)
 
     # Redis에 RAG 문서 JSON 저장
     try:
-        redis_client.set('rag_docs:notices', json.dumps(rag_docs, ensure_ascii=False))
-        logger.info(f"RAG용 공지사항 데이터가 Redis (rag_docs:notices)에 저장되었습니다. (총 {len(rag_docs)}건)")
+        redis_client.set("rag_docs:notices", json.dumps(rag_docs, ensure_ascii=False))
+        logger.info(
+            f"RAG용 공지사항 데이터가 Redis (rag_docs:notices)에 저장되었습니다. (총 {len(rag_docs)}건)"
+        )
         return True
     except Exception as e:
         logger.error(f"Redis RAG용 공지사항 저장 중 오류 발생: {e}")
         return False
-
-

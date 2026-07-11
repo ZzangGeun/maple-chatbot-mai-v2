@@ -7,7 +7,6 @@ import { useChat } from '../hooks/useChat';
 import ChatSidebar from '../components/chat/ChatSidebar';
 import ChatMessages from '../components/chat/ChatMessages';
 import ChatInput from '../components/chat/ChatInput';
-import ChatAdSidebar from '../components/chat/ChatAdSidebar';
 
 import '../styles/pages/chat.css';
 
@@ -41,8 +40,8 @@ const ChatPage = () => {
           selectSession={loadMessages}
         />
       }
-      rightSidebar={<ChatAdSidebar />}
-      layoutClass="chatbot-layout"
+      rightSidebar={null}
+      layoutClass="chatgpt-layout"
     >
       <div className="chat-main">
         <div className="chat-header">

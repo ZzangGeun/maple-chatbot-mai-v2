@@ -3,9 +3,9 @@ services:
     image: ankane/pgvector:latest
     container_name: mai_db
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: "ccg2558!@#"
-      POSTGRES_DB: maple_chatbot_db
+      POSTGRES_USER: ${DATABASE_USER:-postgres}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?DATABASE_PASSWORD must be set}
+      POSTGRES_DB: ${DATABASE_NAME:-maple_chatbot_db}
     ports:
       - "5432:5432"
     volumes:
@@ -58,7 +58,6 @@ services:
     env_file:
       - env/.env.local
     environment:
-      - DB_CONNECTION=postgresql+psycopg://postgres:ccg2558%21%40%23@db:5432/maple_chatbot_db
       - REDIS_URL=redis://redis:6379/0
       - MODEL_PATH=/app/fine_tuned_model/merged_qwen
     volumes:

@@ -13,14 +13,14 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from apps.chat.models import ChatSession
-from apps.chat.services import stream_message_generator
+from apps.chat.services import send_message_async, stream_message_generator
+from common.utils.request_helpers import parse_json_body
 
 logger = logging.getLogger(__name__)
 
 
-def _extract_message_content(request) -> str:
-    """요청 JSON에서 메시지 본문을 추출합니다."""
-    body = json.loads(request.body)
+def _extract_message_content(body: dict) -> str:
+    """파싱된 요청 데이터에서 메시지 본문을 추출합니다."""
     return body.get("message_content", "").strip() or body.get("content", "").strip()
 
 
@@ -77,12 +77,10 @@ async def create_session(request) -> JsonResponse:
     """
     user_profile = request.user if request.user.is_authenticated else None
 
-    # 요청 바디에서 room_name 추출
-    try:
-        body = json.loads(request.body)
-        room_name = body.get("room_name", "새로운 대화").strip()
-    except Exception:
-        room_name = "새로운 대화"
+    body, parse_error = parse_json_body(request)
+    room_name = "새로운 대화"
+    if parse_error is None:
+        room_name = str(body.get("room_name", room_name)).strip() or room_name
 
     session = await ChatSession.objects.acreate(user=user_profile)
     logger.info(f"새로운 세션 생성: {session.session_id}")
@@ -151,9 +149,8 @@ async def send_message(request, session_id: str) -> JsonResponse:
     """
     session = await ChatSession.objects.aget_by_uuid_or_raise(session_id)
 
-    try:
-        content = _extract_message_content(request)
-    except (json.JSONDecodeError, ValueError):
+    body, parse_error = parse_json_body(request)
+    if parse_error:
         return JsonResponse(
             {
                 "success": False,
@@ -162,6 +159,7 @@ async def send_message(request, session_id: str) -> JsonResponse:
             },
             status=400,
         )
+    content = _extract_message_content(body)
 
     if not content:
         return JsonResponse(
@@ -172,9 +170,6 @@ async def send_message(request, session_id: str) -> JsonResponse:
             },
             status=400,
         )
-
-    # 비즈니스 로직 호출
-    from apps.chat.services import send_message_async
 
     user_msg, assistant_msg, _ = await send_message_async(session, content)
 
@@ -253,10 +248,10 @@ async def stream_message(request, session_id: str) -> StreamingHttpResponse:
     """
     session = await ChatSession.objects.aget_by_uuid_or_raise(session_id)
 
-    try:
-        content = _extract_message_content(request)
-    except (json.JSONDecodeError, ValueError):
+    body, parse_error = parse_json_body(request)
+    if parse_error:
         return JsonResponse({"error": "유효하지 않은 요청 형식입니다."}, status=400)
+    content = _extract_message_content(body)
 
     if not content:
         return JsonResponse(

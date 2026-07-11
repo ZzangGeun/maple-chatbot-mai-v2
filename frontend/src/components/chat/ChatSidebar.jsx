@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import '../../styles/components/common.css';
 
 // 값이 없는 프로필 항목에 대해 표시할 대체 문자열
 export const PROFILE_FALLBACK = '미설정';

@@ -40,7 +40,7 @@ def _build_url(endpoint_key: str, **params) -> str:
     return url
 
 
-def _build_headers(api_key: str) -> dict:
+def build_headers(api_key: str) -> dict[str, str]:
     """넥슨 API 요청에 필요한 헤더를 반환합니다."""
     return {
         "x-nxopen-api-key": api_key.strip(),
@@ -54,7 +54,7 @@ async def _request_with_retry(
     url: str,
     headers: dict,
     max_retries: int = 3,
-    initial_delay: float = 1.0,
+    initial_delay: float = RATE_LIMIT_RETRY_DELAY_SECONDS,
 ) -> aiohttp.ClientResponse | None:
     """
     HTTP GET 요청을 지수 백오프 재시도와 함께 실행합니다.
@@ -78,34 +78,57 @@ async def _request_with_retry(
             # 넥슨 Open API의 지연 및 먹통 상황에 대처하기 위해 타임아웃을 설정합니다.
             timeout = aiohttp.ClientTimeout(total=10)
             response = await session.get(url, headers=headers, timeout=timeout)
-            
+
             # 성공 시 즉시 응답을 반환합니다.
             if response.status == 200:
                 return response
-                
+
             # 429(Rate Limit) 혹은 5xx(서버 일시 장애)인 경우 백오프 적용
             if response.status == 429 or 500 <= response.status < 600:
+                response.release()
                 logger.warning(
-                    f"HTTP {response.status} 발생. {attempt}/{max_retries}차 재시도 대기중... (대기 시간: {delay}초)"
+                    "HTTP %d 발생. %d/%d차 요청 실패",
+                    response.status,
+                    attempt,
+                    max_retries,
                 )
+                if attempt == max_retries:
+                    break
                 await asyncio.sleep(delay)
-                delay *= 2  # 다음 대기 시간은 2배로 증가시킵니다.
+                delay *= 2
                 continue
-                
+
             # 그 외의 에러(400, 403, 404 등)는 재시도가 무의미하므로 바로 루프를 탈출합니다.
-            logger.error(f"HTTP {response.status} 에러 발생으로 인해 즉시 요청을 중단합니다. URL: {url}")
+            logger.error(
+                "HTTP %d 에러로 요청을 중단합니다. URL: %s",
+                response.status,
+                url,
+            )
             return response
-            
+
         except asyncio.TimeoutError:
-            logger.warning(f"타임아웃 초과. {attempt}/{max_retries}차 재시도 대기중... (대기 시간: {delay}초)")
+            logger.warning(
+                "타임아웃 초과. %d/%d차 요청 실패",
+                attempt,
+                max_retries,
+            )
+            if attempt == max_retries:
+                break
             await asyncio.sleep(delay)
             delay *= 2
         except aiohttp.ClientError as e:
-            logger.warning(f"네트워크 오류 ({e}). {attempt}/{max_retries}차 재시도 대기중... (대기 시간: {delay}초)")
+            logger.warning(
+                "네트워크 오류 (%s). %d/%d차 요청 실패",
+                e,
+                attempt,
+                max_retries,
+            )
+            if attempt == max_retries:
+                break
             await asyncio.sleep(delay)
             delay *= 2
-            
-    logger.error(f"최대 {max_retries}회 재시도를 초과하여 요청이 실패했습니다. URL: {url}")
+
+    logger.error("최대 %d회 재시도 후 요청이 실패했습니다. URL: %s", max_retries, url)
     return None
 
 
@@ -133,7 +156,7 @@ async def fetch_character_ocid(
     return None
 
 
-async def _fetch_single_endpoint(
+async def fetch_character_endpoint(
     session: aiohttp.ClientSession,
     endpoint_key: str,
     ocid: str,
@@ -157,6 +180,20 @@ async def _fetch_single_endpoint(
     if response and response.status == 200:
         return await response.json()
     return {}
+
+
+async def fetch_character_basic_info(
+    session: aiohttp.ClientSession,
+    ocid: str,
+    headers: dict,
+) -> dict:
+    """캐릭터 기본 프로필 정보를 조회합니다."""
+    return await fetch_character_endpoint(
+        session,
+        "get_character_basic_info",
+        ocid,
+        headers,
+    )
 
 
 async def fetch_all_character_info(
@@ -184,7 +221,7 @@ async def fetch_all_character_info(
         if endpoint_key == "get_character_id":
             continue  # OCID 조회 엔드포인트는 건너뜁니다.
 
-        character_info[endpoint_key] = await _fetch_single_endpoint(
+        character_info[endpoint_key] = await fetch_character_endpoint(
             session, endpoint_key, ocid, headers
         )
         await asyncio.sleep(REQUEST_DELAY_SECONDS)
@@ -203,19 +240,14 @@ async def fetch_account_character_list(api_key: str) -> list[dict]:
         캐릭터 정보 딕셔너리 리스트. 실패 시 빈 리스트.
     """
     url = _build_url("get_account_character_list")
-    headers = {"x-nxopen-api-key": api_key}
+    headers = build_headers(api_key)
 
-    try:
-        async with aiohttp.ClientSession() as session:
-            response = await _request_with_retry(session, url, headers)
-            if response and response.status == 200:
-                data = await response.json()
-                all_characters: list[dict] = []
-                for account in data.get("account_list", []):
-                    all_characters.extend(account.get("character_list", []))
-                return all_characters
-            return []
-
-    except Exception as e:
-        logger.error(f"캐릭터 목록 조회 중 예상치 못한 오류: {e}")
+    async with aiohttp.ClientSession() as session:
+        response = await _request_with_retry(session, url, headers)
+        if response and response.status == 200:
+            data = await response.json()
+            all_characters: list[dict] = []
+            for account in data.get("account_list", []):
+                all_characters.extend(account.get("character_list", []))
+            return all_characters
         return []

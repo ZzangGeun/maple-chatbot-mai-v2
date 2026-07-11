@@ -3,6 +3,104 @@
    채팅 페이지 전용 스타일
 ============================================================================= */
 
+/* ============================================================================= 
+   ChatGPT-Style Layout
+   왼쪽 고정 사이드바 + 화면을 가득 채우는 채팅 영역
+============================================================================= */
+
+.main-container.chatgpt-layout {
+    max-width: none;
+    width: 100%;
+    display: grid;
+    grid-template-columns: 300px minmax(0, 1fr);
+    grid-template-areas: "sidebar-left main-content";
+    gap: 0;
+    padding: 0;
+    /* header(약 53px) + navigation(44px)을 제외한 나머지 화면 전체 */
+    height: calc(100vh - 97px);
+    min-height: 480px;
+    overflow: hidden;
+}
+
+.chatgpt-layout .sidebar-left {
+    grid-area: sidebar-left;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 16px;
+    background: #fffdf9;
+    border-right: 1px solid rgba(255, 152, 0, 0.15);
+}
+
+.chatgpt-layout .sidebar-left::-webkit-scrollbar {
+    width: 6px;
+}
+
+.chatgpt-layout .sidebar-left::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 152, 0, 0.25);
+    border-radius: 3px;
+}
+
+.chatgpt-layout .main-content {
+    grid-area: main-content;
+    background: transparent;
+    border-radius: 0;
+    padding: 0;
+    box-shadow: none;
+    height: 100%;
+    min-height: 0;
+    max-width: none;
+    margin: 0;
+    overflow: hidden;
+}
+
+/* 채팅 기록 목록이 남은 공간을 채우도록 */
+.chatgpt-layout .chat-history-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.chatgpt-layout .chat-history-content {
+    flex: 1;
+    max-height: none;
+}
+
+/* 채팅 본문: 화면 전체 높이 사용 */
+.chatgpt-layout .chat-main {
+    height: 100%;
+    max-height: none;
+    min-height: 0;
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+}
+
+/* 메시지 영역: ChatGPT처럼 중앙 정렬된 넓은 컬럼 */
+.chatgpt-layout .chat-messages {
+    padding: 30px max(30px, calc((100% - 920px) / 2));
+}
+
+.chatgpt-layout .chat-input-wrapper {
+    max-width: 920px;
+}
+
+@media (max-width: 900px) {
+    .main-container.chatgpt-layout {
+        grid-template-columns: 1fr;
+        grid-template-areas: "main-content";
+        height: calc(100vh - 97px);
+    }
+
+    .chatgpt-layout .sidebar-left {
+        display: none;
+    }
+}
+
 .chat-main {
     height: calc(100vh - 190px);
     min-height: 520px;

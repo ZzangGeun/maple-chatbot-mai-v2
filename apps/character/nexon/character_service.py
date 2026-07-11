@@ -12,23 +12,19 @@ from datetime import datetime
 from pathlib import Path
 
 import aiohttp
+from django.conf import settings
 from django.core.cache import cache
 
 from apps.character.nexon.client import (
+    build_headers,
     fetch_account_character_list,
     fetch_all_character_info,
     fetch_character_ocid,
-    _build_headers
 )
-from apps.character.nexon.constants import CACHE_DURATION, NEXON_API_KEY
+from apps.character.nexon.constants import CACHE_DURATION
 from apps.character.nexon.extractors import all_info_extract
 
 logger = logging.getLogger(__name__)
-
-
-
-
-
 def save_character_data_to_json(
     character_name: str,
     character_data: dict,
@@ -89,7 +85,7 @@ async def get_character_data(
     if not character_name or not character_name.strip():
         return None
 
-    final_api_key = api_key or NEXON_API_KEY
+    final_api_key = api_key or getattr(settings, "NEXON_API_KEY", "")
     if not final_api_key or not final_api_key.strip():
         logger.error("NEXON_API_KEY가 설정되지 않았습니다.")
         return None
@@ -100,70 +96,48 @@ async def get_character_data(
     if cached_data:
         return cached_data
 
-    try:
-        headers = _build_headers(final_api_key)
+    headers = build_headers(final_api_key)
 
-        async with aiohttp.ClientSession() as session:
-            # 2. OCID 조회
-            ocid = await fetch_character_ocid(session, character_name, headers)
-            if not ocid:
-                return None
+    async with aiohttp.ClientSession() as session:
+        # 2. OCID 조회
+        ocid = await fetch_character_ocid(session, character_name, headers)
+        if not ocid:
+            return None
 
-            # 3. 상세 정보 조회
-            raw_info = await fetch_all_character_info(session, ocid, headers)
+        # 3. 상세 정보 조회
+        raw_info = await fetch_all_character_info(session, ocid, headers)
 
-        # 4. 데이터 추출
-        extracted_info = all_info_extract(raw_info)
+    # 4. 데이터 추출
+    extracted_info = all_info_extract(raw_info)
 
-        # 5. 캐시 저장 및 JSON 파일 백업
-        cache.set(cache_key, extracted_info, timeout=int(CACHE_DURATION.total_seconds()))
-        save_character_data_to_json(character_name, extracted_info)
+    # 5. 캐시 저장 및 JSON 파일 백업
+    cache.set(cache_key, extracted_info, timeout=int(CACHE_DURATION.total_seconds()))
+    save_character_data_to_json(character_name, extracted_info)
 
-        return extracted_info
-
-    except Exception as e:
-        logger.error(f"캐릭터 정보 조회 중 오류 발생: {e!s}")
-        return None
+    return extracted_info
 
 
 async def process_signup_with_key(api_key: str) -> tuple[str, str] | None:
     """
     API 키를 사용하여 계정 내 가장 레벨이 높은 캐릭터를 찾아 반환합니다.
     회원가입 자동 캐릭터 연동 시 사용됩니다.
-
-    Args:
-        api_key: 사용자가 입력한 넥슨 API 키.
-
-    Returns:
-        (character_name, character_ocid) 튜플, 실패 시 None.
     """
     if not api_key or not api_key.strip():
         return None
 
-    try:
-        all_characters = await fetch_account_character_list(api_key)
-
-        if not all_characters:
-            return None
-
-        # 레벨 내림차순 정렬 후 최고 레벨 캐릭터 선택
-        all_characters.sort(
-            key=lambda x: int(x.get("character_level", 0)), reverse=True
-        )
-        best = all_characters[0]
-        character_name = best.get("character_name")
-        character_ocid = best.get("ocid")
-
-        if not character_name:
-            return None
-
-        # 상세 정보 조회를 통해 유효성 검증 및 캐싱
-        result = await get_character_data(character_name, api_key)
-        if result:
-            return character_name, character_ocid
-
+    all_characters = await fetch_account_character_list(api_key)
+    if not all_characters:
         return None
 
-    except Exception as e:
-        logger.error(f"회원가입 캐릭터 자동 연동 실패: {e!s}")
+    best = max(
+        all_characters,
+        key=lambda character: int(character.get("character_level", 0)),
+    )
+    character_name = best.get("character_name")
+    character_ocid = best.get("ocid")
+    if not character_name or not character_ocid:
         return None
+
+    if await get_character_data(character_name, api_key):
+        return character_name, character_ocid
+    return None

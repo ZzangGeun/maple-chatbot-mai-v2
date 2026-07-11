@@ -1,5 +1,3 @@
-import json
-
 from django.db.models import Count, F, Q, Value
 from django.db.models.functions import Coalesce
 from django.http import JsonResponse
@@ -7,6 +5,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from apps.community.models import CommunityPost
+from common.utils.request_helpers import parse_json_body
 
 
 def _serialize_post(post: CommunityPost) -> dict:
@@ -71,9 +70,8 @@ def post_list(request) -> JsonResponse:
     if not request.user.is_authenticated:
         return JsonResponse({"detail": "로그인이 필요합니다."}, status=401)
 
-    try:
-        body = json.loads(request.body)
-    except (json.JSONDecodeError, ValueError):
+    body, parse_error = parse_json_body(request)
+    if parse_error:
         return JsonResponse({"detail": "요청 형식이 올바르지 않습니다."}, status=400)
 
     title = str(body.get("title", "")).strip()

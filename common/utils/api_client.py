@@ -7,7 +7,9 @@ core 앱에서 분리하여 common에 배치함으로써,
 services/nexon과 apps/core 양쪽에서 의존 방향이 깔끔해집니다.
 """
 
+import asyncio
 import logging
+
 import aiohttp
 from django.conf import settings
 
@@ -16,6 +18,9 @@ from common.utils.datetime_util import get_yesterday_str
 from common.exceptions.nexon import ApiRateLimitExceeded, NexonApiError
 
 logger = logging.getLogger(__name__)
+
+MAX_RETRIES = 3
+INITIAL_RETRY_DELAY_SECONDS = 1.0
 
 
 async def get_api_data(
@@ -42,34 +47,52 @@ async def get_api_data(
     headers = {"x-nxopen-api-key": api_key}
     url = f"{NEXON_BASE_URL}{endpoint}"
 
-    if params is None:
-        params = {}
+    request_params = dict(params or {})
 
     date_required_endpoints = [
         "/ranking/overall",
     ]
 
-    if endpoint in date_required_endpoints and "date" not in params:
-        params["date"] = get_yesterday_str()
+    if endpoint in date_required_endpoints and "date" not in request_params:
+        request_params["date"] = get_yesterday_str()
 
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers, params=params) as response:
-                if response.status == 200:
-                    return await response.json()
-                elif response.status == 429:
-                    raise ApiRateLimitExceeded()
-                else:
-                    text = await response.text()
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            delay = INITIAL_RETRY_DELAY_SECONDS
+            for attempt in range(1, MAX_RETRIES + 1):
+                async with session.get(
+                    url,
+                    headers=headers,
+                    params=request_params,
+                ) as response:
+                    if response.status == 200:
+                        return await response.json()
+
+                    response_text = await response.text()
+                    retryable = response.status == 429 or 500 <= response.status < 600
+                    if retryable and attempt < MAX_RETRIES:
+                        logger.warning(
+                            "Nexon API HTTP %d. %d/%d차 요청 재시도",
+                            response.status,
+                            attempt,
+                            MAX_RETRIES,
+                        )
+                        await asyncio.sleep(delay)
+                        delay *= 2
+                        continue
+
                     logger.error(
                         "API 요청 실패: %s, 상태 코드: %d, 파라미터: %s, 응답: %s",
                         url,
                         response.status,
-                        params,
-                        text,
+                        request_params,
+                        response_text,
                     )
+                    if response.status == 429:
+                        raise ApiRateLimitExceeded()
                     raise NexonApiError(f"API 요청 실패 (HTTP {response.status})")
 
-    except aiohttp.ClientError as e:
+    except (aiohttp.ClientError, asyncio.TimeoutError) as e:
         logger.error("API 요청 중 예외 발생: %s, 오류: %s", url, e)
         raise NexonApiError("API 네트워크 오류 발생")
