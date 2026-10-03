@@ -133,6 +133,9 @@ OPENAI_API_KEY = config("OPENAI_API_KEY", default="")
 AI_SERVER_BASE_URL = config("AI_SERVER_URL", default="http://127.0.0.1:8001")
 REDIS_URL = config("REDIS_URL", default="redis://127.0.0.1:6379/0")
 
+# 넥슨 API 응답을 Redis에 캐싱해 AI 서버와 공유합니다. (common.nexon.cache)
+NEXON_CACHE_ENABLED = config("NEXON_CACHE_ENABLED", default=True, cast=bool)
+
 # ─────────────────────────────────────────────
 # 광고 설정
 # ─────────────────────────────────────────────

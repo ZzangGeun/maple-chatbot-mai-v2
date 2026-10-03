@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react';
 import * as characterApi from '../api/character';
 
-export const useCharacterData = () => {
-    const [searchName, setSearchName] = useState('');
+export const useCharacterData = (initialName = '') => {
+    const [searchName, setSearchName] = useState(initialName);
     const [characterData, setCharacterData] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);

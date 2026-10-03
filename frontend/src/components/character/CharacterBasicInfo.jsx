@@ -1,4 +1,5 @@
 import React from 'react';
+import { BookOpen } from 'lucide-react';
 
 const CharacterBasicInfo = ({ characterData }) => {
     const basicInfo = characterData?.basic_info;
@@ -14,14 +15,14 @@ const CharacterBasicInfo = ({ characterData }) => {
         { label: '성별', value: basicInfo.character_gender },
         { label: '길드', value: basicInfo.character_guild_name || '없음' },
         { label: '인기도', value: basicInfo.character_popularity },
-        { label: '경험치 비율', value: `${basicInfo.character_exp_rate}%` },
+        { label: '경험치 비율', value: basicInfo.character_exp_rate != null ? `${basicInfo.character_exp_rate}%` : '-' },
         { label: '해방 퀘스트', value: basicInfo.liberation_quest_clear === '1' ? '완료' : '미완료' },
         { label: '캐릭터 생성일', value: basicInfo.character_date_create?.split('T')[0] },
     ];
 
     return (
         <div className="info-card">
-            <h3 className="info-card-title">📋 기본 정보</h3>
+            <h3 className="info-card-title"><BookOpen size={18} aria-hidden="true" /> 기본 정보</h3>
             <div className="stat-grid">
                 {fields.map(({ label, value }, idx) => (
                     <div key={idx} className="stat-item">

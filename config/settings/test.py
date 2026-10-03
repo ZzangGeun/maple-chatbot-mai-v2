@@ -46,6 +46,7 @@ CACHES = {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
     }
 }
+NEXON_CACHE_ENABLED = False
 
 # ─────────────────────────────────────────────
 # 세션 백엔드: 캐시 기반 (비동기 호환)

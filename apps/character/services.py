@@ -9,17 +9,14 @@ import logging
 import secrets
 from typing import Any
 
-import aiohttp
 from django.conf import settings
 from django.contrib.auth.models import AbstractBaseUser
 from django.db import DatabaseError
 
 from apps.character.models import CharacterLink
-from apps.character.nexon.client import (
-    build_headers,
-    fetch_character_basic_info,
-    fetch_character_ocid,
-)
+from apps.character.nexon.character_service import get_nexon_client
+from common.exceptions.base import AppException
+from common.exceptions.nexon import CharacterNotFound
 
 logger = logging.getLogger(__name__)
 
@@ -121,37 +118,37 @@ async def verify_and_link_character(
         return True, "SUCCESS", character_info
 
     # 2-2. 넥슨 Open API 호출 및 게임 내 프로필 검증
-    headers = build_headers(nexon_api_key)
+    client = get_nexon_client(nexon_api_key)
+    try:
+        # OCID(식별자) 조회 후, 소개글 변경을 바로 확인해야 하므로 캐시 없이 기본 프로필을 조회합니다.
+        ocid = await client.get_ocid(character_name)
+        basic_info = await client.get_character_endpoint(
+            "/character/basic", ocid, use_cache=False
+        )
+    except CharacterNotFound:
+        logger.warning("캐릭터 OCID 조회 실패: %s", character_name)
+        return False, "CHARACTER_NOT_FOUND", None
+    except AppException as e:
+        logger.error("넥슨 Open API 통신 장애: %s", e.message)
+        return False, "API_COMMUNICATION_ERROR", None
+
+    # 주의: 현재 넥슨 Open API의 /character/basic 응답에는 character_description 필드가 없어
+    # 실제 API 키로는 이 비교가 통과하지 않습니다. (DEBUG + API 키 미설정 시의 가상 연동만 동작)
+    character_desc = basic_info.get("character_description", "") or ""
+    world_name = basic_info.get("world_name", "알 수 없음")
+
+    # 게임 내 캐릭터 소개글에 발급된 인증 코드가 삽입되었는지 비교 검증
+    if verification_code not in character_desc:
+        logger.warning("인게임 소개글 내 인증코드 불일치: %s", character_name)
+        return False, "CODE_MISMATCH", None
 
     try:
-        async with aiohttp.ClientSession() as http_session:
-            # OCID(식별자) 조회
-            ocid = await fetch_character_ocid(http_session, character_name, headers)
-            if not ocid:
-                logger.warning("캐릭터 OCID 조회 실패: %s", character_name)
-                return False, "CHARACTER_NOT_FOUND", None
-
-            # 기본 프로필 조회
-            basic_info = await fetch_character_basic_info(
-                http_session,
-                ocid,
-                headers,
-            )
-
-            character_desc = basic_info.get("character_description", "") or ""
-            world_name = basic_info.get("world_name", "알 수 없음")
-
-            # 게임 내 캐릭터 소개글에 발급된 인증 코드가 삽입되었는지 비교 검증
-            if verification_code not in character_desc:
-                logger.warning("인게임 소개글 내 인증코드 불일치: %s", character_name)
-                return False, "CODE_MISMATCH", None
-
-            character_info = await _save_character_link(
-                user,
-                character_name,
-                ocid,
-                world_name,
-            )
+        character_info = await _save_character_link(
+            user,
+            character_name,
+            ocid,
+            world_name,
+        )
 
         _consume_verification_code(session, character_name)
         logger.info(
@@ -161,9 +158,6 @@ async def verify_and_link_character(
         )
         return True, "SUCCESS", character_info
 
-    except aiohttp.ClientError as e:
-        logger.error("넥슨 Open API 통신 장애: %s", e)
-        return False, "API_COMMUNICATION_ERROR", None
     except (DatabaseError, KeyError, TypeError, ValueError) as e:
         logger.error("캐릭터 연동 처리 중 서버 오류: %s", e)
         return False, "SERVER_ERROR", None

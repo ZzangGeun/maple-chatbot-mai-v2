@@ -1,4 +1,5 @@
 import React from 'react';
+import { Backpack, Package, Star } from 'lucide-react';
 
 const CharacterEquipmentInfo = ({ characterData }) => {
     const itemEquipment = characterData?.item_info?.item_equipment;
@@ -8,17 +9,17 @@ const CharacterEquipmentInfo = ({ characterData }) => {
 
     // 잠재 등급 색상
     const getGradeColor = (grade) => {
-        if (!grade) return '#999';
-        if (grade.includes('레전드리')) return '#00ff00';
-        if (grade.includes('유니크')) return '#ffcc00';
-        if (grade.includes('에픽')) return '#cc66ff';
-        if (grade.includes('레어')) return '#66ccff';
-        return '#999';
+        if (!grade) return '#75826a';
+        if (grade.includes('레전드리')) return '#4d823a';
+        if (grade.includes('유니크')) return '#a67925';
+        if (grade.includes('에픽')) return '#9560a8';
+        if (grade.includes('레어')) return '#4e86a7';
+        return '#75826a';
     };
 
     return (
         <div className="info-card">
-            <h3 className="info-card-title">🎒 장비 정보 ({equipmentList.length}개)</h3>
+            <h3 className="info-card-title"><Backpack size={18} aria-hidden="true" /> 장착 장비 <span>· {equipmentList.length}개</span></h3>
             <div className="equipment-grid">
                 {equipmentList.map(([slot, item], idx) => (
                     <div key={idx} className="equipment-item">
@@ -26,13 +27,13 @@ const CharacterEquipmentInfo = ({ characterData }) => {
                             {item.icon ? (
                                 <img src={item.icon} alt={item.name} />
                             ) : (
-                                <span style={{ fontSize: '32px' }}>❓</span>
+                                <Package size={27} aria-hidden="true" />
                             )}
                         </div>
                         <div className="equipment-name">{item.name}</div>
                         <div className="equipment-part">{item.part}</div>
                         {item.starforce && item.starforce !== '0' && (
-                            <div className="equipment-starforce">⭐ {item.starforce}</div>
+                            <div className="equipment-starforce"><Star size={12} aria-hidden="true" /> {item.starforce}</div>
                         )}
                         {item.potential_option_grade && (
                             <div

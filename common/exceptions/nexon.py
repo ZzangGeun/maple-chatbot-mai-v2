@@ -9,13 +9,19 @@ from common.exceptions.base import AppException
 
 
 class NexonApiError(AppException):
-    """Nexon API 호출 중 일반적인 오류가 발생했을 때."""
+    """Nexon API 호출 중 일반적인 오류가 발생했을 때.
+
+    Args:
+        error_name: 넥슨 API 오류 코드 (예: "OPENAPI00005" 유효하지 않은 API 키). 알 수 없으면 빈 문자열.
+    """
 
     def __init__(
         self,
         message: str = "넥슨 API 요청 중 오류가 발생했습니다.",
         status_code: int = 502,
+        error_name: str = "",
     ) -> None:
+        self.error_name = error_name
         super().__init__(
             message=message,
             code="NEXON_API_ERROR",

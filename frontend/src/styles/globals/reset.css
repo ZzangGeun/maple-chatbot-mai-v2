@@ -1,55 +1,49 @@
-/* =============================================================================
-   Reset and Base Styles
-   글로벌 리셋 및 기본 스타일
-============================================================================= */
-
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+html, body, #root { min-height: 100%; width: 100%; }
 body {
-    font-family: 'Pretendard', sans-serif;
-    background: var(--background-gradient);
-    min-height: 100vh;
-    margin: 0;
-    padding: 0;
-    font-size: 16px;
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Malgun Gothic', sans-serif;
+  background: var(--background-light);
+  color: var(--text-primary);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-wrap: break-word;
 }
-
-html, body, #root {
-    width: 100%;
-    height: 100%;
+button, input, textarea, select { font: inherit; }
+button, a, input, textarea, select { -webkit-tap-highlight-color: transparent; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: .55; }
+a { color: inherit; }
+img, svg { vertical-align: middle; }
+img { max-width: 100%; }
+button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, summary:focus-visible {
+  outline: 3px solid #547d43; outline-offset: 4px;
 }
-
-/* Common Typography */
+::selection { background: #f7d8b7; color: #30382f; }
 .text-primary { color: var(--text-primary); }
 .text-secondary { color: var(--text-secondary); }
 .text-muted { color: var(--text-muted); }
-
-/* Text Alignment */
 .text-center { text-align: center; }
 .text-left { text-align: left; }
 .text-right { text-align: right; }
-
-/* Flexbox Utilities */
 .flex { display: flex; }
 .flex-column { flex-direction: column; }
 .flex-center { align-items: center; justify-content: center; }
-
-/* Spacing Utilities */
 .gap-small { gap: 8px; }
 .gap-medium { gap: 16px; }
 .gap-large { gap: 24px; }
-
 .mb-small { margin-bottom: 8px; }
 .mb-medium { margin-bottom: 16px; }
 .mb-large { margin-bottom: 24px; }
-
 .p-small { padding: 8px; }
 .p-medium { padding: 16px; }
 .p-large { padding: 24px; }
-
-/* Visibility */
 .hidden { display: none !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+@media (pointer: coarse) {
+ input:not([type="checkbox"]):not([type="radio"]), textarea { font-size: 16px; } }

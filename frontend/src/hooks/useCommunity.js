@@ -50,6 +50,8 @@ export const useCommunity = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [sortBy, setSortBy] = useState('latest');
     const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [submitError, setSubmitError] = useState(null);
     const [refreshKey, setRefreshKey] = useState(0);
     const [showWriteModal, setShowWriteModal] = useState(false);
     const [writeForm, setWriteForm] = useState({
@@ -59,10 +61,15 @@ export const useCommunity = () => {
     });
 
     useEffect(() => {
+        if (showWriteModal) setSubmitError(null);
+    }, [showWriteModal]);
+
+    useEffect(() => {
         let cancelled = false;
 
         const fetchPosts = async () => {
             setIsLoading(true);
+            setError(null);
             try {
                 const response = await getCommunityPosts({
                     category: selectedCategory,
@@ -77,7 +84,10 @@ export const useCommunity = () => {
                     count: response.data.categoryCounts[category.id] || 0
                 })));
             } catch (error) {
-                if (!cancelled) console.error('Failed to fetch posts:', error);
+                if (!cancelled) {
+                    console.error('Failed to fetch posts:', error);
+                    setError('잠시 후 다시 시도해주세요. 연결 상태를 확인해주셔도 좋아요.');
+                }
             } finally {
                 if (!cancelled) setIsLoading(false);
             }
@@ -91,6 +101,7 @@ export const useCommunity = () => {
 
     const handleSubmitPost = async (e) => {
         e.preventDefault();
+        setSubmitError(null);
         try {
             await createCommunityPost(writeForm);
             setShowWriteModal(false);
@@ -102,6 +113,7 @@ export const useCommunity = () => {
             setRefreshKey(key => key + 1);
         } catch (error) {
             console.error('Failed to create post:', error);
+            setSubmitError('이야기를 등록하지 못했어요. 잠시 후 다시 시도해주세요.');
         }
     };
 
@@ -109,6 +121,8 @@ export const useCommunity = () => {
         e.preventDefault();
         setSearchQuery(searchText.trim());
     };
+
+    const retryPosts = () => setRefreshKey(key => key + 1);
 
     return {
         posts,
@@ -120,6 +134,9 @@ export const useCommunity = () => {
         sortBy,
         setSortBy,
         isLoading,
+        error,
+        submitError,
+        retryPosts,
         showWriteModal,
         setShowWriteModal,
         writeForm,

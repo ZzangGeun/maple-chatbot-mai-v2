@@ -1,144 +1,114 @@
 import React from 'react';
+import { ArrowUpRight, BookOpen, ChevronRight, History, Leaf, LogIn, LogOut, MessageSquare, Plus, Shield, UserRound, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import '../../styles/components/common.css';
 
-// 값이 없는 프로필 항목에 대해 표시할 대체 문자열
 export const PROFILE_FALLBACK = '미설정';
 
-/**
- * 프로필 필드 값을 표시용으로 정규화하는 순수 헬퍼.
- * 값이 없으면(null/undefined/빈 문자열) 대체 표시(PROFILE_FALLBACK)를 반환하고,
- * 값이 있으면 그대로 반환한다.
- * @param {*} value - AuthContext.user에서 읽은 원본 프로필 값
- * @returns {string} 표시할 값 또는 대체 표시
- */
 export const resolveProfileField = (value) => {
-  if (value === null || value === undefined) {
-    return PROFILE_FALLBACK;
-  }
-  if (typeof value === 'string' && value.trim() === '') {
+  if (value === null || value === undefined || (typeof value === 'string' && !value.trim())) {
     return PROFILE_FALLBACK;
   }
   return value;
 };
 
-const ChatSidebar = ({
-  sessions,
-  currentSessionId,
-  handleNewChat,
-  selectSession
-}) => {
-  const { user, logout, isLoggedIn } = useAuth();
+const formatSessionDate = (value) => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '대화 기록' : date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
+};
+
+const ChatSidebar = ({ sessions, currentSessionId, handleNewChat, selectSession, isBusy, isOpen, onClose }) => {
+  const { user, logout, isLoggedIn, openLoginModal } = useAuth();
   const navigate = useNavigate();
+  const username = user?.maple_nickname || user?.username || user?.user?.username || '모험가';
+  const login = () => {
+    onClose?.();
+    if (openLoginModal) openLoginModal();
+    else navigate('/login');
+  };
 
   return (
-    <>
-      {/* User Profile */}
-      <div className="user-profile-container">
-        <div className="profile-section">
-          <div className="profile-avatar">
-            {isLoggedIn ? '👤' : 'G'}
+    <div className="chat-sidebar" id="chatSidebar" role={isOpen ? 'dialog' : undefined} aria-modal={isOpen ? 'true' : undefined} aria-label="나의 모험 노트">
+      <div className="chat-sidebar-heading">
+        <span><Leaf size={18} /> 나의 모험 노트</span>
+        <button type="button" className="chat-icon-button chat-mobile-close" aria-label="대화 목록 닫기" onClick={onClose}>
+          <X size={18} />
+        </button>
+      </div>
+
+      <button className="chat-new-button" type="button" onClick={handleNewChat} disabled={isBusy}>
+        <Plus size={18} /> 새 대화 시작 <span className="chat-new-shortcut">NEW</span>
+      </button>
+
+      <section className="chat-history" aria-label="대화 기록">
+        <h2 className="chat-sidebar-label"><History size={14} /> 최근 대화</h2>
+        {!isLoggedIn ? (
+          <div className="chat-history-empty">
+            <div className="chat-history-empty-icon"><BookOpen size={22} /></div>
+            <p>모험의 기록을 남겨보세요</p>
+            <span>로그인하면 이전 대화를<br />언제든 다시 볼 수 있어요.</span>
+            <button type="button" onClick={login}>로그인하기 <ArrowUpRight size={13} /></button>
           </div>
-          <div className="profile-info">
-            <div className="profile-name-section">
-              <div className="profile-name">
-                {isLoggedIn ? (user?.maple_nickname || user?.username || 'User') : 'Guest'}
-              </div>
-              <div className="profile-server">
-                <span className="server-icon"></span>
-                {isLoggedIn ? resolveProfileField(user?.server) : PROFILE_FALLBACK}
-              </div>
-            </div>
-            <div className="divider"></div>
-            {isLoggedIn ? (
-              <div className="profile-stats">
-                <div className="stat-row">
-                  <span className="stat-label">Lv.</span>
-                  <span className="stat-value">{resolveProfileField(user?.level)}</span>
-                </div>
-                <div className="stat-row">
-                  <span className="stat-label">직업</span>
-                  <span className="stat-value">{resolveProfileField(user?.job)}</span>
-                </div>
-                <div className="stat-row">
-                  <span className="stat-label">길드</span>
-                  <span className="stat-value">{resolveProfileField(user?.guild)}</span>
-                </div>
-              </div>
-            ) : (
-              <div className="profile-stats">
-                <div className="stat-row">
-                  <span className="stat-label">상태</span>
-                  <span className="stat-value">비로그인</span>
-                </div>
-              </div>
-            )}
+        ) : sessions.length === 0 ? (
+          <div className="chat-history-empty">
+            <MessageSquare size={24} />
+            <p>아직 대화 기록이 없어요</p>
+            <span>첫 번째 이야기를 시작해 보세요.</span>
+          </div>
+        ) : (
+          <div className="chat-session-list">
+            {sessions.map(session => (
+              <button
+                type="button"
+                key={session.id}
+                className={`chat-session${session.id === currentSessionId ? ' is-current' : ''}`}
+                onClick={() => selectSession(session.id)}
+                disabled={isBusy}
+                aria-current={session.id === currentSessionId ? 'true' : undefined}
+              >
+                <MessageSquare size={15} />
+                <span className="chat-session-info">
+                  <span className="chat-session-title">{session.room_name || '새로운 모험 이야기'}</span>
+                  <span className="chat-session-date">{formatSessionDate(session.created_at)}</span>
+                </span>
+                {session.id === currentSessionId && <span className="chat-session-dot" aria-label="현재 대화" />}
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <div className="chat-sidebar-tip">
+        <Shield size={17} />
+        <p><strong>함께라면 더 쉬운 모험</strong><span>육성, 보스, 장비 고민까지<br />가이드에게 편하게 물어보세요.</span></p>
+      </div>
+
+      <section className="chat-profile" aria-label="모험가 프로필">
+        <div className="chat-profile-top">
+          <div className="chat-profile-avatar"><UserRound size={20} /></div>
+          <div className="chat-profile-name">
+            <strong>{isLoggedIn ? username : '게스트 모험가'}</strong>
+            <span>{isLoggedIn ? resolveProfileField(user?.server) : '반가워요, 모험가님!'}</span>
           </div>
           {isLoggedIn && (
-            <div className="detail-link" onClick={() => navigate('/character')}>
-              상세
-            </div>
+            <button type="button" className="chat-profile-details" aria-label="캐릭터 상세 보기" onClick={() => { onClose?.(); navigate('/character'); }}>
+              <ChevronRight size={17} />
+            </button>
           )}
         </div>
-        <div className="profile-actions">
-          {isLoggedIn ? (
-            <button className="logout-btn" onClick={logout}>로그아웃</button>
-          ) : (
-            <button className="logout-btn" onClick={() => navigate('/login')}>로그인</button>
-          )}
-        </div>
-      </div>
-
-      {/* Chat History */}
-      <div className="chat-history-container">
-        <div className="chat-history-header">
-          채팅 기록
-        </div>
-        <div className="chat-history-content">
-          <button
-            className="btn btn-outline"
-            style={{ width: '100%', marginBottom: '10px' }}
-            onClick={handleNewChat}
-          >
-            + 새 채팅
-          </button>
-
-          {!isLoggedIn ? (
-            <div className="guest-history-placeholder" style={{ textAlign: 'center', marginTop: '20px', color: 'var(--text-secondary)' }}>
-              <p style={{ fontSize: '0.9rem', marginBottom: '10px' }}>로그인하면 대화 기록을<br />저장하고 볼 수 있습니다.</p>
-              <button
-                className="btn btn-primary"
-                style={{ fontSize: '0.85rem', padding: '5px 15px' }}
-                onClick={() => navigate('/login')}
-              >
-                로그인하기
-              </button>
-            </div>
-          ) : (
-            sessions.map(session => (
-              <div
-                key={session.id}
-                className="history-item"
-                onClick={() => selectSession(session.id)}
-                style={{
-                  cursor: 'pointer',
-                  opacity: session.id === currentSessionId ? 1 : 0.7
-                }}
-              >
-                <div className="history-date">
-                  {new Date(session.created_at || session.updated_at).toLocaleDateString()}
-                  {session.id === currentSessionId && ' (현재)'}
-                </div>
-                <div className="history-text">
-                  {session.room_name || session.title || `채팅 #${session.id.substring(0, 8)}`}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    </>
+        {isLoggedIn && (
+          <dl className="chat-profile-stats">
+            <div><dt>레벨</dt><dd>{resolveProfileField(user?.level)}</dd></div>
+            <div><dt>직업</dt><dd>{resolveProfileField(user?.job)}</dd></div>
+            <div><dt>길드</dt><dd>{resolveProfileField(user?.guild)}</dd></div>
+          </dl>
+        )}
+        <button type="button" className="chat-profile-action" onClick={isLoggedIn ? () => { onClose?.(); logout(); } : login}>
+          {isLoggedIn ? <LogOut size={14} /> : <LogIn size={14} />}
+          {isLoggedIn ? '로그아웃' : '로그인하고 기록 저장하기'}
+        </button>
+      </section>
+    </div>
   );
 };
 

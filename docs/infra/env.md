@@ -31,11 +31,28 @@ REDIS_URL=redis://redis:6379/0
 # 4. Nexon Open API Settings (Critical)
 # 넥슨 개발자 센터(Nexon Open API Developer Center)에서 발급받은 API 키
 NEXON_API_KEY=test_your_nexon_open_api_key_here
+# 서버 프로세스당 초당 요청 수 상한 (개발 단계 키 기준 5, 서비스 단계 키로 바꾸면 올림)
+NEXON_REQUESTS_PER_SECOND=5
+# 넥슨 API 응답을 Redis에 캐싱해 Django와 AI 서버가 공유
+NEXON_CACHE_ENABLED=True
 
 # 5. AI & LLM Settings
-# RAG 임베딩 및 답변 생성에 필요한 API 키
-OPENAI_API_KEY=sk-proj-your-openai-api-key-here
-GEMINI_API_KEY=AIzaSyYourGeminiApiKeyHere
+# 보조 호출(질문 분류·검색어 재작성·캐릭터명 추출)과 기본 답변 생성에 쓸 모델: gemini | deepseek
+LLM_PROVIDER=gemini
+# 답변 생성만 다른 모델로 바꿀 때 (비우면 LLM_PROVIDER와 같음): gemini | deepseek | local
+ANSWER_LLM_PROVIDER=
+GOOGLE_API_KEY=AIzaSyYourGeminiApiKeyHere
+GEMINI_MODEL=gemini-2.5-flash
+DEEPSEEK_API_KEY=sk-your-deepseek-api-key
+DEEPSEEK_MODEL=deepseek-chat
+# ANSWER_LLM_PROVIDER=local: OpenAI 호환 서버로 띄운 로컬 모델 (예: vllm serve fine_tuned_model/merged_qwen --served-model-name merged_qwen)
+LOCAL_LLM_BASE_URL=http://localhost:8002/v1
+LOCAL_LLM_MODEL=merged_qwen
+# 프롬프트에 넣을 이전 대화 메시지 수 / 메시지당 최대 글자 수
+CHAT_HISTORY_MAX_MESSAGES=10
+CHAT_HISTORY_MESSAGE_MAX_CHARS=2000
+# Django가 호출할 AI 서버 주소
+AI_SERVER_URL=http://localhost:8001
 
 # 6. Vector Database Settings
 CHROMA_DB_PATH=/app/data/chromadb

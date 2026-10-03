@@ -1,6 +1,6 @@
 import logging
 
-from ai_server.llm.factory import get_llm
+from ai_server.llm.factory import get_answer_llm
 from ai_server.prompts.templates import RAG_SINGLE_QUERY_PROMPT
 from ai_server.rag.retriever import Retriever
 from ai_server.schemas.rag import RAGQueryResponse, ReferencedDocument
@@ -26,10 +26,10 @@ async def process_single_rag_query(query: str, top_k: int) -> RAGQueryResponse:
     prompt = RAG_SINGLE_QUERY_PROMPT.format(context=context, query=query)
 
     # 3. LLM 비동기 추론 실행
-    llm = get_llm()
+    llm = get_answer_llm()
     response = await llm.ainvoke(prompt, config=runnable_config)
 
-    answer = response.content if hasattr(response, "content") else str(response)
+    answer = response.text
 
     # 4. 참조 문서 리스트 구성
     referenced_docs = [

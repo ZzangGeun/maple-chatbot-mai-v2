@@ -1,30 +1,53 @@
-# services/nexon/character_service.py
+# apps/character/nexon/character_service.py
 """
 캐릭터 서비스 오케스트레이터
 
 캐시 조회 → API 호출 → 데이터 추출 → 저장 흐름을 조율합니다.
-개별 책임은 client.py(HTTP)와 extractors.py(변환)에 위임합니다.
+HTTP 호출과 응답 캐시(Redis, AI 서버와 공유)는 공용 넥슨 클라이언트(common.nexon)에,
+응답 정제는 common.nexon.extractors에 위임합니다.
 """
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
-import aiohttp
 from django.conf import settings
 from django.core.cache import cache
 
-from apps.character.nexon.client import (
-    build_headers,
-    fetch_account_character_list,
-    fetch_all_character_info,
-    fetch_character_ocid,
-)
-from apps.character.nexon.constants import CACHE_DURATION
-from apps.character.nexon.extractors import all_info_extract
+from common.exceptions.base import AppException
+from common.exceptions.nexon import CharacterNotFound
+from common.nexon import NexonCache, NexonClient
+from common.nexon.constants import CHARACTER_INFO_ENDPOINTS
+from common.nexon.extractors import all_info_extract
 
 logger = logging.getLogger(__name__)
+
+# 정제된 캐릭터 정보(검색 화면 응답) 캐시 유효 기간
+CACHE_DURATION = timedelta(hours=1)
+
+_shared_cache: NexonCache | None = None
+
+
+def _get_shared_cache() -> NexonCache | None:
+    """AI 서버와 함께 쓰는 넥슨 API 응답 캐시(Redis)를 반환합니다."""
+    global _shared_cache
+
+    if not getattr(settings, "NEXON_CACHE_ENABLED", True):
+        return None
+    if _shared_cache is None:
+        _shared_cache = NexonCache(settings.REDIS_URL)
+    return _shared_cache
+
+
+def get_nexon_client(api_key: str | None = None) -> NexonClient:
+    """넥슨 API 클라이언트를 만듭니다. api_key가 없으면 서비스 키(NEXON_API_KEY)를 사용합니다."""
+    return NexonClient(
+        api_key or getattr(settings, "NEXON_API_KEY", ""),
+        cache=_get_shared_cache(),
+    )
+
+
 def save_character_data_to_json(
     character_name: str,
     character_data: dict,
@@ -70,8 +93,8 @@ async def get_character_data(
     캐릭터 이름으로 종합 정보를 반환합니다.
 
     처리 순서:
-      1. 캐시 확인 (Redis 또는 Django 기본 캐시)
-      2. 캐시 미스 → 넥슨 API 호출
+      1. 정제된 정보 캐시 확인 (Django 캐시)
+      2. 캐시 미스 → 넥슨 API 조회 (엔드포인트 응답은 Redis에 따로 캐싱)
       3. 데이터 추출 및 정제
       4. 캐시 저장 + JSON 파일 저장
 
@@ -80,14 +103,9 @@ async def get_character_data(
         api_key: 사용할 API 키. None이면 환경변수에서 로드합니다.
 
     Returns:
-        정제된 캐릭터 정보 딕셔너리, 실패 시 None.
+        정제된 캐릭터 정보 딕셔너리. 캐릭터가 없거나 조회에 실패하면 None.
     """
     if not character_name or not character_name.strip():
-        return None
-
-    final_api_key = api_key or getattr(settings, "NEXON_API_KEY", "")
-    if not final_api_key or not final_api_key.strip():
-        logger.error("NEXON_API_KEY가 설정되지 않았습니다.")
         return None
 
     # 1. 캐시 확인
@@ -96,21 +114,28 @@ async def get_character_data(
     if cached_data:
         return cached_data
 
-    headers = build_headers(final_api_key)
+    # 2. 넥슨 API 조회 (일부 엔드포인트가 실패하면 해당 섹션은 빈 값으로 채웁니다)
+    client = get_nexon_client(api_key)
+    try:
+        result = await client.fetch_character(
+            CHARACTER_INFO_ENDPOINTS.values(), character_name=character_name
+        )
+    except CharacterNotFound:
+        logger.info(f"존재하지 않는 캐릭터: {character_name}")
+        return None
+    except AppException as e:
+        logger.error(f"캐릭터 정보 조회 실패 ({character_name}): {e.message}")
+        return None
 
-    async with aiohttp.ClientSession() as session:
-        # 2. OCID 조회
-        ocid = await fetch_character_ocid(session, character_name, headers)
-        if not ocid:
-            return None
+    raw_info = {
+        key: result.responses.get(path, {})
+        for key, path in CHARACTER_INFO_ENDPOINTS.items()
+    }
 
-        # 3. 상세 정보 조회
-        raw_info = await fetch_all_character_info(session, ocid, headers)
-
-    # 4. 데이터 추출
+    # 3. 데이터 추출
     extracted_info = all_info_extract(raw_info)
 
-    # 5. 캐시 저장 및 JSON 파일 백업
+    # 4. 캐시 저장 및 JSON 파일 백업
     cache.set(cache_key, extracted_info, timeout=int(CACHE_DURATION.total_seconds()))
     save_character_data_to_json(character_name, extracted_info)
 
@@ -125,7 +150,11 @@ async def process_signup_with_key(api_key: str) -> tuple[str, str] | None:
     if not api_key or not api_key.strip():
         return None
 
-    all_characters = await fetch_account_character_list(api_key)
+    try:
+        all_characters = await NexonClient(api_key).get_account_characters()
+    except AppException as e:
+        logger.warning(f"계정 캐릭터 목록 조회 실패: {e.message}")
+        return None
     if not all_characters:
         return None
 

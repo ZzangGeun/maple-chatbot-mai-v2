@@ -1,37 +1,30 @@
 # ai_server/graph/builder/rag_builder.py
 """
 RAG 서브 그래프 조립 모듈.
+
+rewrite(질문 재작성) → retrieve(문서 검색)를 실행하고,
+output_schema(RagOutput)에 정의된 knowledge_context와 sources만 메인 그래프로 돌려줍니다.
 """
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.types import RetryPolicy
 
-from ai_server.graph.state.rag_state import RagState
-from ai_server.graph.nodes.rag_nodes import gemini_rewrite_node, local_retrieve_node
-from ai_server.graph.nodes.common_nodes import local_generate_rag_node
-
-# LLM/외부 자원 호출 노드용 재시도 정책 — 일시적 네트워크/API 오류에 지수 백오프로 재시도합니다.
-_retry_policy = RetryPolicy(max_attempts=3, initial_interval=0.5, backoff_factor=2.0)
+from ai_server.graph.nodes.rag_nodes import retrieve_node, rewrite_node
+from ai_server.graph.state.rag_state import RagOutput, RagState
 
 
 def build_rag_graph() -> CompiledStateGraph:
-    workflow = StateGraph(RagState)
+    workflow = StateGraph(RagState, output_schema=RagOutput)
 
-    # 노드 등록 (LLM/검색 호출 노드는 재시도 정책 적용)
-    workflow.add_node("gemini_rewrite", gemini_rewrite_node, retry_policy=_retry_policy)
-    workflow.add_node("local_retrieve", local_retrieve_node, retry_policy=_retry_policy)
-    workflow.add_node("local_generate", local_generate_rag_node, retry_policy=_retry_policy)
+    workflow.add_node("rewrite", rewrite_node)
+    workflow.add_node("retrieve", retrieve_node)
 
-    # 엣지 연결
-    workflow.add_edge(START, "gemini_rewrite")
-    workflow.add_edge("gemini_rewrite", "local_retrieve")
-    workflow.add_edge("local_retrieve", "local_generate")
-    workflow.add_edge("local_generate", END)
+    workflow.add_edge(START, "rewrite")
+    workflow.add_edge("rewrite", "retrieve")
+    workflow.add_edge("retrieve", END)
 
-    # 서브 그래프는 주로 메인 그래프의 Checkpointer를 상속받거나 공유하므로,
-    # 여기서는 별도의 메모리 세이버를 달지 않고 컴파일합니다.
     return workflow.compile()
 
-# 모듈 로드 시 조립 (필요 시 사용)
+
+# 모듈 로드 시 조립
 rag_graph = build_rag_graph()

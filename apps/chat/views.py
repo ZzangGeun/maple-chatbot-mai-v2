@@ -35,11 +35,12 @@ async def get_sessions(request) -> JsonResponse:
 
     GET /api/v1/chat/rooms
     """
-    if request.user.is_authenticated:
+    user = await request.auser()
+    if user.is_authenticated:
         # filter는 sync, 하지만 비동기 반복 가능
         sessions = [
             s
-            async for s in ChatSession.objects.filter(user=request.user).order_by(
+            async for s in ChatSession.objects.filter(user=user).order_by(
                 "-created_at"
             )
         ]
@@ -75,7 +76,8 @@ async def create_session(request) -> JsonResponse:
 
     POST /api/v1/chat/rooms
     """
-    user_profile = request.user if request.user.is_authenticated else None
+    user = await request.auser()
+    user_profile = user if user.is_authenticated else None
 
     body, parse_error = parse_json_body(request)
     room_name = "새로운 대화"
@@ -124,17 +126,14 @@ async def get_messages(request, session_id: str) -> JsonResponse:
                 }
             )
         elif msg.role == "assistant":
-            thinking = (
-                msg.metadata.thinking
-                if hasattr(msg, "metadata") and msg.metadata
-                else ""
-            )
+            metadata = getattr(msg, "metadata", None)
             message_list.append(
                 {
                     "id": msg.id,
                     "sender_type": "assistant",
                     "message_content": msg.content,
-                    "thinking": thinking,
+                    "thinking": (metadata.thinking or "") if metadata else "",
+                    "sources": metadata.sources if metadata else [],
                     "sent_at": msg.created_at.isoformat(),
                 }
             )
@@ -171,7 +170,8 @@ async def send_message(request, session_id: str) -> JsonResponse:
             status=400,
         )
 
-    user_msg, assistant_msg, _ = await send_message_async(session, content)
+    user = await request.auser()
+    user_msg, assistant_msg, _ = await send_message_async(session, content, user)
 
     return JsonResponse(
         {
@@ -258,5 +258,10 @@ async def stream_message(request, session_id: str) -> StreamingHttpResponse:
             {"error": "메시지 본문(message_content)이 준비되어야 합니다."}, status=400
         )
 
-    stream_generator = stream_message_generator(session, content)
-    return StreamingHttpResponse(stream_generator, content_type="text/event-stream")
+    user = await request.auser()
+    stream_generator = stream_message_generator(session, content, user)
+    response = StreamingHttpResponse(stream_generator, content_type="text/event-stream")
+    # 프록시(Nginx 등)가 응답을 모아서 보내지 않도록 버퍼링을 끕니다.
+    response["Cache-Control"] = "no-cache"
+    response["X-Accel-Buffering"] = "no"
+    return response

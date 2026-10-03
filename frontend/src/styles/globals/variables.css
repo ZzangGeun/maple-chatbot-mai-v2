@@ -1,66 +1,42 @@
-/* =============================================================================
-   CSS Variables - Theme Colors & Design Tokens
-   MapleStory Orange Theme 색상 및 디자인 변수
-============================================================================= */
-
 :root {
-    /* Colors - Primary Palette */
-    --primary-color: #ff9800;
-    --primary-dark: #f57c00;
-    --accent-color: #ffb74d;
-    --accent-dark: #ff8c00;
-    
-    /* Colors - Text */
-    --text-primary: #1a1a1a;
-    --text-secondary: #4a4a4a;
-    --text-muted: #888888;
-    
-    /* Colors - Borders & Backgrounds */
-    --border-light: #f0e6dc;
-    --border-gray: #d0d0d0;
-    --border-subtle: #f0f0f0;
-    --background-light: #fffaf5;
-    --background-hover: #f9f9f9;
-    --background-muted: #f8f9fa;
-
-    /* Colors - Neutral Extended */
-    --text-dark: #333333;
-    --text-light-gray: #666666;
-    --text-placeholder: #999999;
-    --color-white: #ffffff;
-    --overlay-dark: rgba(0, 0, 0, 0.6);
-
-    /* Colors - Accent Pink (links) */
-    --link-pink: #ffb7c5;
-
-    /* Colors - Semantic States */
-    --error-color: #dc3545;
-    --error-text: #c62828;
-    --error-bg: #fff5f5;
-    --error-border: #ffcdd2;
-
-    /* Colors - Equipment Potential Grades */
-    --grade-legendary: #00ff00;
-    --grade-unique: #ffcc00;
-    --grade-epic: #cc66ff;
-    --grade-rare: #66ccff;
-    --grade-default: #999999;
-    
-    /* Gradients */
-    --background-gradient: linear-gradient(135deg, #fffaf5 0%, #fff5eb 100%);
-    --header-gradient: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
-    --nav-gradient: linear-gradient(135deg, #fff8f0 0%, #fff5eb 100%);
-    
-    /* Shadows */
-    --shadow-light: 0 2px 10px rgba(255, 152, 0, 0.15);
-    --shadow-medium: 0 4px 15px rgba(255, 152, 0, 0.1);
-    
-    /* Border Radius */
-    --border-radius-small: 8px;
-    --border-radius-medium: 12px;
-    --border-radius-large: 15px;
-    --border-radius-round: 50%;
-    
-    /* Transitions */
-    --transition-fast: 0.3s ease;
+  --primary-color: #bd5018;
+  --primary-dark: #a34210;
+  --accent-color: #f4aa72;
+  --accent-dark: #d16b31;
+  --green-color: #547d43;
+  --green-light: #edf3e4;
+  --text-primary: #30382f;
+  --text-secondary: #626b5e;
+  --text-muted: #737b6b;
+  --text-dark: #30382f;
+  --text-light-gray: #626b5e;
+  --text-placeholder: #858a7b;
+  --color-white: #fff;
+  --border-light: #e4e7da;
+  --border-gray: #d5dacb;
+  --border-subtle: #eef0e8;
+  --background-light: #f8f7ef;
+  --background-hover: #f4f5ec;
+  --background-muted: #f2f4eb;
+  --overlay-dark: rgba(35, 43, 30, .45);
+  --link-pink: #bd5018;
+  --error-color: #bd4242;
+  --error-text: #a53333;
+  --error-bg: #fff4f0;
+  --error-border: #f3d4c9;
+  --grade-legendary: #3b8f33;
+  --grade-unique: #a7790b;
+  --grade-epic: #8b55c3;
+  --grade-rare: #358bb1;
+  --grade-default: #7e8678;
+  --background-gradient: #f8f7ef;
+  --header-gradient: #fffef9;
+  --nav-gradient: #fffef9;
+  --shadow-light: 0 3px 0 rgba(64, 75, 45, .04);
+  --shadow-medium: 0 5px 0 rgba(64, 75, 45, .04), 0 8px 24px rgba(64, 75, 45, .025);
+  --border-radius-small: 10px;
+  --border-radius-medium: 16px;
+  --border-radius-large: 22px;
+  --border-radius-round: 50%;
+  --transition-fast: 180ms ease;
 }

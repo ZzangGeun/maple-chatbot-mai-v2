@@ -120,4 +120,48 @@
 }
 ```
 
-* **비동기 스트리밍(Streaming) 지원 여부:** 대화 인터페이스에서 실시간으로 답변이 타이핑되듯 보여주는 기능(Streaming)이 필요할 경우 HTTP Server-Sent Events (SSE) 혹은 Websocket 엔드포인트 `/ws/chat/{room_id}`로 변경하여 설계해야 합니다.
+---
+
+## 5. 메시지 전송 및 답변 스트리밍 (Send Message & Stream AI Reply, SSE)
+
+웹 채팅 화면이 사용하는 엔드포인트입니다. 답변을 토큰 단위로 Server-Sent Events(SSE)로 전송합니다.
+
+* **Endpoint:** `POST /rooms/{room_id}/stream`
+* **Response Content-Type:** `text/event-stream`
+
+### Request Body
+```json
+{
+  "content": "스타포스 강화가 뭐야?"
+}
+```
+
+### Response (SSE)
+모든 이벤트는 `data: <JSON>` 한 줄과 빈 줄로 구분되며, 스트림은 항상 `data: [DONE]`으로 끝납니다.
+
+```
+data: {"type": "status", "content": "질문을 살펴보고 있어요"}
+
+data: {"type": "route", "route": "knowledge"}
+
+data: {"type": "status", "content": "관련 문서를 찾고 있어요"}
+
+data: {"type": "token", "content": "스타포스 강화는 장비의 성능을"}
+
+data: {"type": "token", "content": " 올려주는 시스템이담. [1]"}
+
+data: {"type": "sources", "sources": [{"index": 1, "title": "스타포스 강화 안내", "url": "https://...", "category": "guide", "date": "2026-10-01"}]}
+
+data: [DONE]
+```
+
+| type | 설명 |
+| :--- | :--- |
+| `status` | 진행 상태 문구 (질문 분석, 문서 검색, 캐릭터 조회, 답변 작성) |
+| `route` | 질문 분류 결과: `chat` / `knowledge` / `character` / `character_knowledge` |
+| `token` | 답변 텍스트 조각. 순서대로 이어 붙이면 전체 답변이 됩니다. |
+| `sources` | 답변 근거 문서 목록 (지식 검색을 거친 경우에만, 답변 뒤에 1회). `index`는 답변 본문의 `[n]` 표시와 대응합니다. |
+| `error` | 처리 실패. 현재 프론트엔드는 이 이벤트를 화면에 표시하지 않으므로, 서버가 안내 문구를 `token`으로도 함께 보냅니다. (안내 문구는 대화 기록에 저장되지 않습니다) |
+
+* 사용자 메시지는 AI 응답 성공 여부와 관계없이 저장되며, 답변은 받은 내용이 있을 때만 저장됩니다.
+* 메시지 목록 조회(3번)의 assistant 메시지에는 근거 문서 `sources` 배열이 함께 포함됩니다.

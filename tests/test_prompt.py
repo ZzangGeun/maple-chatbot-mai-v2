@@ -25,30 +25,32 @@ def test_prompt_template_enum_keys() -> None:
 
 def test_get_prompt_with_enum() -> None:
     """PromptTemplate Enum 객체를 직접 get_prompt에 전달할 때 정상 작동하는지 검증합니다."""
-    # CHAT_SYSTEM 프롬프트 조회 검증
-    gemini_prompt = get_prompt(PromptTemplate.CHAT_SYSTEM, model="gemini")
-    local_prompt = get_prompt(PromptTemplate.CHAT_SYSTEM, model="local")
+    # GENERATE_SYSTEM 프롬프트 조회 검증
+    gemini_prompt = get_prompt(PromptTemplate.GENERATE_SYSTEM, model="gemini")
+    local_prompt = get_prompt(PromptTemplate.GENERATE_SYSTEM, model="local")
 
     assert "돌의 정령" in gemini_prompt
-    assert "<|im_start|>system" in local_prompt
+    assert "{references}" in gemini_prompt
+    # 로컬 모델도 채팅 API로 호출하므로 ChatML 토큰을 프롬프트에 직접 넣지 않습니다.
+    assert "<|im_start|>" not in local_prompt
     assert "돌의 정령" in local_prompt
 
 
 def test_get_prompt_with_string_keys_backward_compatibility() -> None:
     """하위 호환성 문자열 키가 정상적으로 예전 방식과 새 방식 모두 매핑되는지 검증합니다."""
     # 1. 예전 스타일의 접두사가 있는 문자열 키
-    prompt_gemini_legacy = get_prompt("gemini_chat_system")
-    prompt_local_legacy = get_prompt("local_chat_system")
+    prompt_gemini_legacy = get_prompt("gemini_generate_system")
+    prompt_local_legacy = get_prompt("local_generate_system")
 
     assert "돌의 정령" in prompt_gemini_legacy
-    assert "<|im_start|>system" in prompt_local_legacy
+    assert "돌의 정령" in prompt_local_legacy
 
     # 2. 새로운 스타일의 접두사 없는 문자열 키 + model 파라미터 조합
-    prompt_gemini_new = get_prompt("chat_system", model="gemini")
-    prompt_local_new = get_prompt("chat_system", model="local")
+    prompt_gemini_new = get_prompt("route_system", model="gemini")
+    prompt_local_new = get_prompt("route_system", model="local")
 
-    assert "돌의 정령" in prompt_gemini_new
-    assert "<|im_start|>system" in prompt_local_new
+    assert "character_knowledge" in prompt_gemini_new
+    assert "character_knowledge" in prompt_local_new
 
 
 def test_get_prompt_invalid_cases() -> None:
@@ -59,4 +61,4 @@ def test_get_prompt_invalid_cases() -> None:
 
     # 유효하지 않은 모델명이 지정되었을 때 KeyError 발생 확인
     with pytest.raises(KeyError):
-        get_prompt(PromptTemplate.CHAT_SYSTEM, model="invalid_model")
+        get_prompt(PromptTemplate.GENERATE_SYSTEM, model="invalid_model")

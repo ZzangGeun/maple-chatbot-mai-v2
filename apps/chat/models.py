@@ -179,6 +179,21 @@ class MessageMetadata(models.Model):
         verbose_name="토큰 사용량"
     )
 
+    route = models.CharField(
+        max_length=30,
+        blank=True,
+        default="",
+        verbose_name="질문 분류 경로",
+        help_text="chat / knowledge / character / character_knowledge"
+    )
+
+    sources = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name="근거 문서",
+        help_text="답변 근거로 사용한 문서 목록 (index, title, url, category, date)"
+    )
+
     created_at = models.DateTimeField(
         auto_now_add=True,
         db_index=True,

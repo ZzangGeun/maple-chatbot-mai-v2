@@ -3,10 +3,24 @@ import * as authApi from '../api/auth';
 
 const AuthContext = createContext();
 
+// 로그인 응답과 세션 확인 응답의 프로필 위치를 같은 형태로 정규화합니다.
+export const normalizeAuthUser = (payload) => {
+  const account = payload.user || payload;
+  return {
+    ...account,
+    maple_nickname: payload.maple_nickname
+      ?? payload.profile?.maple_nickname
+      ?? account.maple_nickname
+      ?? account.profile?.maple_nickname
+      ?? null,
+  };
+};
+
 const initialState = {
   isLoggedIn: false,
   user: null,
   isLoading: true,
+  isAuthReady: false,
   error: null,
   isLoginModalOpen: false,
   isSignupModalOpen: false, // 회원가입 모달 상태 추가
@@ -20,6 +34,7 @@ const authReducer = (state, action) => {
       return {
         ...state,
         isLoggedIn: true,
+        isAuthReady: true,
         user: action.payload,
         isLoading: false,
         error: null,
@@ -30,6 +45,7 @@ const authReducer = (state, action) => {
       return {
         ...state,
         isLoggedIn: false,
+        isAuthReady: true,
         user: null,
         isLoading: false,
         error: action.payload
@@ -38,6 +54,7 @@ const authReducer = (state, action) => {
       return {
         ...state,
         isLoggedIn: false,
+        isAuthReady: true,
         user: null,
         isLoading: false
       };
@@ -49,6 +66,8 @@ const authReducer = (state, action) => {
       return { ...state, isSignupModalOpen: true, isLoginModalOpen: false, error: null };
     case 'CLOSE_SIGNUP_MODAL':
       return { ...state, isSignupModalOpen: false, error: null };
+    case 'SIGNUP_SUCCESS':
+      return { ...state, isSignupModalOpen: false, isLoading: false, error: null };
     case 'SET_ERROR':
       return { ...state, error: action.payload, isLoading: false };
     default:
@@ -63,10 +82,8 @@ export const AuthProvider = ({ children }) => {
     const checkAuth = async () => {
       dispatch({ type: 'AUTH_START' });
       try {
-        // user_info 응답: { user: {id, username, email}, maple_nickname, message }
-        // response.data 전체를 payload로 저장해 user.username, maple_nickname에 모두 접근 가능
         const response = await authApi.getUserInfo();
-        dispatch({ type: 'LOGIN_SUCCESS', payload: response.data });
+        dispatch({ type: 'LOGIN_SUCCESS', payload: normalizeAuthUser(response.data) });
       } catch (error) {
         // 미로그인(401) 포함 모든 에러는 비로그인 상태로 처리
         dispatch({ type: 'LOGIN_FAILURE', payload: null });
@@ -79,7 +96,7 @@ export const AuthProvider = ({ children }) => {
     dispatch({ type: 'AUTH_START' });
     try {
       const response = await authApi.login(username, password);
-      dispatch({ type: 'LOGIN_SUCCESS', payload: response.data.user });
+      dispatch({ type: 'LOGIN_SUCCESS', payload: normalizeAuthUser(response.data) });
       return { success: true };
     } catch (error) {
       let errorMessage = '로그인 실패';
@@ -106,9 +123,9 @@ export const AuthProvider = ({ children }) => {
   const register = async (userData) => {
     dispatch({ type: 'AUTH_START' });
     try {
-      const response = await authApi.signup(userData);
+      await authApi.signup(userData);
       // 회원가입 성공 시 자동 로그인하지 않고 성공 반환
-      dispatch({ type: 'CLOSE_SIGNUP_MODAL' });
+      dispatch({ type: 'SIGNUP_SUCCESS' });
       return { success: true, message: '회원가입이 완료되었습니다.' };
     } catch (error) {
       let errorMessage = '회원가입 실패';

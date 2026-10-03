@@ -9,6 +9,7 @@ env/.env.local 파일을 우선적으로 로드하며, 존재하지 않을 경�
 
 import os
 from pathlib import Path
+from typing import Literal
 from urllib.parse import quote_plus
 
 from dotenv import load_dotenv
@@ -60,13 +61,57 @@ class DatabaseSettings(BaseModel):
 
 
 class ModelSettings(BaseModel):
-    """AI 모델 설정."""
+    """AI 모델 설정.
 
-    provider: str = Field(
-        default_factory=lambda: os.getenv("LLM_PROVIDER", "local").lower()
+    용도별로 모델을 고릅니다.
+      - provider       (LLM_PROVIDER)       : 질문 분류·검색어 재작성·캐릭터명 추출 + 기본 답변 생성
+      - answer_provider (ANSWER_LLM_PROVIDER): 답변 생성만 다른 모델로 바꿀 때 (비우면 LLM_PROVIDER와 같음)
+
+    provider 값:
+      - "gemini"  : Gemini API (기본값, GOOGLE_API_KEY 필요)
+      - "deepseek": DeepSeek API (DEEPSEEK_API_KEY 필요)
+      - "local"   : OpenAI 호환 API로 서빙되는 로컬 모델 (vLLM 등, LOCAL_LLM_BASE_URL 필요).
+                    구조화 출력이 필요한 보조 호출에는 쓰지 않고 답변 생성에만 사용할 수 있습니다.
+    허용되지 않은 값이면 서버 시작 시 설정 검증 오류가 발생합니다.
+    """
+
+    provider: Literal["gemini", "deepseek"] = Field(
+        default_factory=lambda: os.getenv("LLM_PROVIDER", "gemini").lower(),
+        validate_default=True,
+    )
+    answer_provider: Literal["gemini", "deepseek", "local"] = Field(
+        default_factory=lambda: (
+            os.getenv("ANSWER_LLM_PROVIDER") or os.getenv("LLM_PROVIDER", "gemini")
+        ).lower(),
+        validate_default=True,
+    )
+    gemini_model: str = Field(
+        default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    )
+    deepseek_model: str = Field(
+        default_factory=lambda: os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+    )
+    local_llm_base_url: str = Field(
+        default_factory=lambda: os.getenv("LOCAL_LLM_BASE_URL", "")
+    )
+    local_llm_model: str = Field(
+        default_factory=lambda: os.getenv("LOCAL_LLM_MODEL", "merged_qwen")
     )
     model_path: str = Field(default_factory=lambda: os.getenv("MODEL_PATH", ""))
     base_model: str = Field(default_factory=lambda: os.getenv("BASE_MODEL", ""))
+
+
+class ChatSettings(BaseModel):
+    """대화 처리 설정."""
+
+    # 프롬프트에 포함할 이전 대화 메시지 수 (현재 질문 제외)
+    history_max_messages: int = Field(
+        default_factory=lambda: int(os.getenv("CHAT_HISTORY_MAX_MESSAGES", "10"))
+    )
+    # 이전 대화 메시지 하나당 최대 글자 수 (긴 답변이 토큰을 과도하게 쓰지 않도록 자릅니다)
+    history_message_max_chars: int = Field(
+        default_factory=lambda: int(os.getenv("CHAT_HISTORY_MESSAGE_MAX_CHARS", "2000"))
+    )
 
 
 class ApiSettings(BaseModel):
@@ -77,6 +122,9 @@ class ApiSettings(BaseModel):
         default_factory=lambda: os.getenv("HUGGINGFACE_TOKEN", "")
     )
     google_api_key: str = Field(default_factory=lambda: os.getenv("GOOGLE_API_KEY", ""))
+    deepseek_api_key: str = Field(
+        default_factory=lambda: os.getenv("DEEPSEEK_API_KEY", "")
+    )
 
 
 class LangfuseSettings(BaseModel):
@@ -125,6 +173,7 @@ class Settings(BaseModel):
 
     db: DatabaseSettings = Field(default_factory=DatabaseSettings)
     model: ModelSettings = Field(default_factory=ModelSettings)
+    chat: ChatSettings = Field(default_factory=ChatSettings)
     api: ApiSettings = Field(default_factory=ApiSettings)
     langfuse: LangfuseSettings = Field(default_factory=LangfuseSettings)
 

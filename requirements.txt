@@ -16,7 +16,6 @@ beautifulsoup4==4.14.3
 requests==2.32.5
 
 redis==7.4.0
-langgraph-checkpoint-redis==0.4.1
 
 
 # Environment
@@ -25,8 +24,10 @@ python-dotenv==1.0.0
 # LangChain / LangGraph
 langchain-community==0.4.1
 langchain-core==1.2.26
+langchain-deepseek==1.0.1  # LLM_PROVIDER=deepseek
 langchain-google-genai==4.2.1
 langchain-huggingface==1.2.1
+langchain-openai==1.1.10  # ANSWER_LLM_PROVIDER=local: OpenAI 호환 API로 서빙되는 로컬 모델 호출
 langchain-postgres==0.0.17
 langchain-text-splitters==1.1.1
 langgraph==1.1.6

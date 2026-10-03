@@ -5,13 +5,15 @@ AI 서버 생명주기(Lifespan) 관리 모듈
 startup 시 critical 인프라 초기화 실패는 예외를 전파해 앱 기동을 중단합니다.
 shutdown 시에는 모든 인프라를 순서대로 정리하며, 개별 실패가 나머지 정리를 막지 않습니다.
 
+AI 서버는 대화 기록을 저장하지 않으므로(stateless) 체크포인터 없이 그래프를 빌드합니다.
+
 Startup 핸들러:
-  - LocalLLM    : 로컬 Qwen 모델을 VRAM에 적재합니다. (critical)
-  - LLMWarmup   : 더미 추론을 실행해 CUDA 컨텍스트를 미리 워밍업합니다. (non-critical)
-  - Scheduler   : 캐릭터 데이터 배치 임베딩 스케줄러를 가동합니다. (non-critical)
+  - Scheduler     : 캐릭터 데이터 배치 임베딩 스케줄러를 가동합니다. (non-critical)
+  - Observability : Langfuse 모니터링을 시작합니다. (non-critical)
 
 Shutdown 핸들러:
-  - Scheduler   : APScheduler를 안전하게 종료합니다.
+  - Scheduler     : APScheduler를 안전하게 종료합니다.
+  - Observability : 남은 모니터링 이벤트를 전송합니다.
 """
 
 import inspect
@@ -21,7 +23,6 @@ from contextlib import asynccontextmanager
 from typing import Any, Awaitable, Union
 
 from fastapi import FastAPI
-from langgraph.checkpoint.redis.aio import AsyncRedisSaver
 
 from ai_server.common import observability
 from ai_server.graph.builder.main_builder import build_main_graph
@@ -40,13 +41,6 @@ _HandlerFn = Callable[[], Union[Any, Awaitable[Any]]]
 
 # APScheduler 인스턴스를 모듈 수준에서 관리하여 shutdown 시 참조할 수 있도록 합니다.
 _scheduler = None
-
-
-def _local_llm_startup() -> None:
-    """로컬 LLM(Qwen)을 VRAM에 적재합니다."""
-    from ai_server.llm.llm_loader import get_local_llm
-
-    get_local_llm()
 
 
 def _scheduler_startup() -> None:
@@ -94,7 +88,6 @@ def _observability_shutdown() -> None:
 # critical=False : 실패해도 경고만 남기고 나머지 초기화를 계속합니다.
 # ---------------------------------------------------------------------------
 _STARTUP_HANDLERS: list[tuple[str, _HandlerFn, bool]] = [
-    ("LocalLLM", _local_llm_startup, False),
     ("Scheduler", _scheduler_startup, False),
     ("Observability", _observability_startup, False),
 ]
@@ -111,32 +104,19 @@ _SHUTDOWN_HANDLERS: list[tuple[str, _HandlerFn]] = [
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """FastAPI 애플리케이션 라이프사이클 컨텍스트 매니저."""
-    from ai_server.config import settings
-
-    redis_url = settings.redis_url
-    logger.info("LangGraph 체크포인트를 위한 Redis 연결 시도: %s", redis_url)
-
     try:
-        # AsyncRedisSaver를 비동기 컨텍스트 매니저로 사용하여 리소스를 안전하게 관리합니다.
-        async with AsyncRedisSaver.from_conn_string(redis_url) as checkpointer:
-            # Redis 인덱스 자동 생성
-            await checkpointer.asetup()
-            logger.info("LangGraph Redis Checkpointer (AsyncRedisSaver) 설정 완료.")
-
-            # 컴파일된 그래프를 FastAPI app.state에 바인딩
-            app.state.graph = build_main_graph(checkpointer=checkpointer)
-            logger.info("하이브리드 에이전트 그래프 빌드 및 앱 상태 바인딩 완료.")
-
-            await _startup()
-            yield
-            await _shutdown()
+        # 컴파일된 그래프를 FastAPI app.state에 바인딩
+        app.state.graph = build_main_graph()
+        logger.info("에이전트 그래프 빌드 및 앱 상태 바인딩 완료.")
     except Exception as e:
-        logger.critical(
-            "Redis Checkpointer 또는 애플리케이션 초기화 중 치명적 에러 발생: %s",
-            e,
-            exc_info=True,
-        )
+        logger.critical("그래프 초기화 중 치명적 에러 발생: %s", e, exc_info=True)
         raise
+
+    await _startup()
+    try:
+        yield
+    finally:
+        await _shutdown()
 
 
 async def _startup() -> None:

@@ -1,134 +1,150 @@
-import asyncio
-import json
-import logging
-from typing import Optional
+# ai_server/graph/nodes/nexon_nodes.py
+"""
+넥슨 API 서브 그래프 전용 노드 모음.
 
-import aiohttp
+extract_character(조회 대상·필요 정보 파악) → fetch_character(넥슨 Open API 조회·요약) 순으로 실행되며,
+답변 생성은 메인 그래프의 generate 노드가 담당합니다.
+"""
+
+import logging
+from typing import Any
+
+from langchain_core.messages import BaseMessage
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
 
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnableConfig
-
+from ai_server.config import settings
 from ai_server.graph.state.nexon_state import NexonState
-from ai_server.graph.tools.nexon_api_tool import NexonAPIClient
-from ai_server.llm.gemini_loader import get_gemini_llm
+from ai_server.graph.tools import character_context as cc
+from ai_server.llm.factory import get_utility_llm
 from ai_server.prompts import PromptTemplate, get_prompt
+from common.exceptions.base import AppException
+from common.exceptions.nexon import ApiRateLimitExceeded, CharacterNotFound
+from common.nexon import NexonCache, NexonClient
 
 logger = logging.getLogger("NexonNodes")
 
-# 싱글턴 클라이언트
-_nexon_client = NexonAPIClient()
+# 후속 질문("그 캐릭터 장비는?")에서도 캐릭터명을 찾을 수 있도록 최근 대화를 함께 봅니다.
+_EXTRACT_CONTEXT_WINDOW = 6
+# 한 질문에서 조회할 최대 정보 종류 수 (넥슨 API 호출 수 제한)
+MAX_ASPECTS = 6
+
+# Django와 같은 Redis 캐시를 쓰므로, 웹에서 검색한 캐릭터는 챗봇에서 다시 조회하지 않습니다.
+_nexon_client = NexonClient(settings.api.nexon_api_key, cache=NexonCache(settings.redis_url))
 
 
-class MapleCharacterIntent(BaseModel):
-    """Gemini로부터 구조화된 출력을 받기 위해 정의한 Pydantic 스키마.
-    사용자의 질문 속에서 메이플 관련 핵심 정보를 식별하여 매핑합니다.
-    """
-    character_name: Optional[str] = Field(
-        default=None, 
-        description="검색 타겟이 되는 캐릭터의 이름 (예: '아델은최강')"
+class CharacterQuery(BaseModel):
+    """캐릭터 질문 분석 결과를 구조화 출력으로 받기 위한 스키마."""
+
+    character_name: str | None = Field(
+        default=None,
+        description="조회할 캐릭터 이름. 마지막 질문에 없으면 직전 대화에서 이어지는 캐릭터 이름, 없으면 null",
     )
-    world: Optional[str] = Field(
-        default=None, 
-        description="캐릭터가 머무는 서버/월드 이름 (예: '스카니아', '루나')"
+    refers_to_self: bool = Field(
+        default=False,
+        description="'내 캐릭터', '내 스펙', '나'처럼 사용자 본인의 캐릭터를 묻는지 여부",
     )
-    item_name: Optional[str] = Field(
-        default=None, 
-        description="성능 및 가격 정보를 얻고자 하는 아이템 이름 (예: '앱솔랩스 시프글러브')"
+    aspects: list[cc.CharacterAspect] = Field(
+        default_factory=list,
+        description="답변에 필요한 캐릭터 정보 종류 (여러 개 가능)",
     )
 
 
-async def gemini_intent_extract_node(state: NexonState, config: RunnableConfig = None) -> dict:
-    """Gemini를 사용한 넥슨 API 파라미터(엔티티) 구조화 추출 노드.
-    
-    문자열 파싱 과정(백틱 제거, JSON 변환 등)에서의 에러 발생 가능성을 
-    근본적으로 배제하기 위해 LangChain의 `with_structured_output` API를 활용합니다.
-    """
-    # 구조화 추출은 결정적 출력이 필요하므로 temperature=0.0을 사용합니다.
-    llm = get_gemini_llm(temperature=0.0)
-    # Pydantic 모델을 전달하여 Gemini가 정의된 형태의 JSON 객체를 바로 채워서 응답하도록 유도합니다.
-    structured_llm = llm.with_structured_output(MapleCharacterIntent)
-    
-    question = state["messages"][-1].content
-
-    extract_system = get_prompt(PromptTemplate.INTENT_EXTRACT_SYSTEM, model="gemini")
-
+async def extract_character_query(
+    messages: list[BaseMessage], config: RunnableConfig | None = None
+) -> dict[str, Any]:
+    """최근 대화를 보고 조회할 캐릭터와 필요한 정보 종류를 추출합니다."""
     prompt = ChatPromptTemplate.from_messages([
-        ("system", extract_system),
-        ("human", "{question}")
+        ("system", get_prompt(PromptTemplate.INTENT_EXTRACT_SYSTEM, model="gemini")),
+        MessagesPlaceholder(variable_name="messages"),
     ])
+    chain = prompt | get_utility_llm().with_structured_output(CharacterQuery)
+    result: CharacterQuery = await chain.ainvoke(
+        {"messages": messages[-_EXTRACT_CONTEXT_WINDOW:]}, config=config
+    )
+    return result.model_dump()
 
-    chain = prompt | structured_llm
 
+def resolve_target(
+    query: dict[str, Any], user_context: dict[str, Any] | None
+) -> tuple[str, str, bool] | None:
+    """조회할 캐릭터를 정합니다.
+
+    Returns:
+        (캐릭터명, OCID(모르면 빈 문자열), 대표 캐릭터 여부). 정할 수 없으면 None.
+        질문에 다른 캐릭터명이 있으면 그 캐릭터를, 없거나 대표 캐릭터와 같으면 대표 캐릭터를 조회합니다.
+    """
+    main = (user_context or {}).get("main_character") or {}
+    main_name = (main.get("character_name") or "").strip()
+    name = (query.get("character_name") or "").strip()
+
+    if name and name.lower() != main_name.lower():
+        return name, "", False
+    if main_name:
+        return main_name, main.get("ocid") or "", True
+    return None
+
+
+def select_aspects(query: dict[str, Any], route: str) -> list[str]:
+    """조회할 정보 종류를 고릅니다. 질문에서 고르지 못했으면 경로별 기본값을 사용합니다."""
+    aspects = [
+        aspect
+        for aspect in dict.fromkeys(query.get("aspects") or [])
+        if aspect in cc.ASPECT_PATHS
+    ]
+    if not aspects:
+        aspects = cc.DEFAULT_ASPECTS.get(route, ["stat"])
+    return aspects[:MAX_ASPECTS]
+
+
+async def extract_character_node(
+    state: NexonState, config: RunnableConfig | None = None
+) -> dict:
+    """질문에서 조회할 캐릭터와 필요한 정보 종류를 추출하는 노드."""
     try:
-        # 모델 구조화 호출 실행
-        result: MapleCharacterIntent = await chain.ainvoke({"question": question}, config=config)
-        entities = result.model_dump()
+        query = await extract_character_query(state["messages"], config)
     except Exception as e:
-        # 추출 실패 시 캐릭터명을 비워 둔다.
-        # (질문 전체를 캐릭터명으로 사용하면 넥슨 API에 잘못된 요청이 나가므로,
-        # nexon_api_tool_node의 '캐릭터명 인식 실패' 경로를 타도록 합니다.)
-        logger.error(f"[GeminiIntentExtract] 구조화 추출 중 예상치 못한 오류 발생: {e}")
-        entities = {"character_name": None, "world": None, "item_name": None}
+        # 추출에 실패하면 캐릭터명을 비워 둡니다.
+        # (대표 캐릭터가 있으면 대표 캐릭터를, 없으면 '캐릭터명을 알려 달라'는 안내 경로를 탑니다.)
+        logger.error(f"[ExtractCharacter] 질문 분석 실패: {e}")
+        query = {"character_name": None, "refers_to_self": False, "aspects": []}
 
-    logger.info(f"[GeminiIntentExtract] 최종 추출된 엔티티: {entities}")
-    return {"extracted_entities": entities}
+    logger.info(f"[ExtractCharacter] 분석 결과: {query}")
+    return {"character_query": query}
 
 
-async def nexon_api_tool_node(state: NexonState) -> dict:
-    """추출된 캐릭터명으로 넥슨 Open API를 호출하고 마크다운 형태로 변환하는 노드.
-    
-    I/O 바운드 작업인 외부 API 요청의 비동기 이점을 위해 async/await를 유지합니다.
-    """
-    entities = state.get("extracted_entities") or {}
-    character_name: str = entities.get("character_name", "")
+async def fetch_character_node(state: NexonState) -> dict:
+    """넥슨 Open API로 필요한 정보만 조회해 답변 모델용 참고 자료로 요약하는 노드."""
+    query = state.get("character_query") or {}
+    target = resolve_target(query, state.get("user_context"))
+    if target is None:
+        return {"character_context": cc.describe_missing_target(bool(query.get("refers_to_self")))}
 
-    if not character_name:
-        logger.warning("[NexonAPI] extracted_entities에 character_name이 없어 기본 실패 반환 처리합니다.")
-        context = "## 캐릭터 조회 실패\n캐릭터명을 인식하지 못했습니다."
-        return {"context": context}
-
-    logger.info(f"[NexonAPI] 캐릭터 '{character_name}' API 실시간 조회 및 데이터 파이프라인 구동")
+    name, ocid, is_main = target
+    aspects = select_aspects(query, state.get("route", "character"))
+    logger.info(f"[FetchCharacter] '{name}' 조회 (대표 캐릭터: {is_main}) | 정보: {aspects}")
 
     try:
-        summary = await _nexon_client.get_character_summary(character_name)
-        context = _format_character_context(character_name, summary)
-
-    except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, RuntimeError) as e:
-        logger.error(f"[NexonAPI] 캐릭터 '{character_name}' API 호출 실패: {e}")
-        context = (
-            f"## 캐릭터 조회 오류\n"
-            f"'{character_name}' 캐릭터 정보를 가져오는 데 실패했습니다. "
-            "잠시 후 다시 시도해주세요."
+        result = await _nexon_client.fetch_character(
+            cc.paths_for(aspects), character_name=name, ocid=ocid
         )
+    except CharacterNotFound:
+        return {"character_context": cc.describe_not_found(name)}
+    except ApiRateLimitExceeded:
+        return {"character_context": cc.describe_api_error(name, rate_limited=True)}
+    except AppException as e:
+        logger.error(f"[FetchCharacter] '{name}' 조회 실패: {e.message}")
+        return {"character_context": cc.describe_api_error(name)}
 
-    return {"context": context}
+    if result.failed:
+        logger.warning(f"[FetchCharacter] 일부 정보 조회 실패: {list(result.failed)}")
 
+    try:
+        context = cc.build_character_context(name, result, aspects, is_main_character=is_main)
+    except Exception:
+        # 응답 형식이 예상과 달라 요약에 실패해도 답변 전체가 실패하지 않도록 합니다.
+        logger.exception(f"[FetchCharacter] '{name}' 정보 요약 실패")
+        context = cc.describe_api_error(name)
 
-def _format_character_context(character_name: str, summary: dict) -> str:
-    """넥슨 API 응답 결과를 Gemini RAG 답변 생성 모델이 분석하기 좋은 최적의 마크다운 형식으로 포맷팅합니다.
-    
-    데이터 가독성을 위해 기본 프로필은 테이블 구조로, 가변적인 스탯 정보는 JSON 형태로 보존합니다.
-    """
-    basic: dict = summary.get("basic", {})
-    stat: dict = summary.get("stat", {})
-
-    context = f"""## 캐릭터 기본 정보: {character_name}
-
-| 항목 | 값 |
-|------|-----|
-| 캐릭터명 | {basic.get("character_name", "알 수 없음")} |
-| 레벨 | {basic.get("character_level", "알 수 없음")} |
-| 직업 | {basic.get("character_class", "알 수 없음")} |
-| 월드 | {basic.get("world_name", "알 수 없음")} |
-
-## 스탯 정보
-
-```json
-{json.dumps(stat, ensure_ascii=False, indent=2)}
-```
-
----
-*출처: 넥슨 Open API 실시간 조회*
-"""
-    return context
+    return {"character_context": context}

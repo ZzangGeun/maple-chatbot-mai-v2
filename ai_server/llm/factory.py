@@ -2,43 +2,103 @@
 """
 LLM 팩토리 모듈
 
-환경변수 LLM_PROVIDER에 따라 적절한 LLM 인스턴스를 반환합니다.
-각 로더 모듈은 자체 모듈 수준 싱글턴을 관리하므로
-factory는 단순히 올바른 함수를 호출하는 역할만 합니다.
+용도별 채팅 모델을 설정(ai_server.config.ModelSettings)에 따라 반환합니다.
+그래프 노드는 특정 프로바이더를 직접 import하지 않고 이 모듈만 사용합니다.
 
-  "gemini" → get_gemini_llm()
-  "local"  → get_local_llm() (기본값)
+  get_utility_llm(): 질문 분류·검색어 재작성·캐릭터명 추출 (LLM_PROVIDER)
+                     구조화 출력을 쓰며 temperature 0으로 결정적으로 동작합니다.
+  get_answer_llm() : 최종 답변 생성 (ANSWER_LLM_PROVIDER, 비우면 LLM_PROVIDER)
+
+프로바이더:
+  "gemini"  → Gemini API
+  "deepseek"→ DeepSeek API (ChatDeepSeek: DeepSeek이 지원하지 않는 json_schema 구조화 출력을
+              function calling으로 바꿔 호출하므로 노드 코드는 그대로 사용할 수 있습니다)
+  "local"   → OpenAI 호환 API로 서빙되는 로컬 모델 (답변 생성 전용)
+              (예: vllm serve fine_tuned_model/merged_qwen --served-model-name merged_qwen)
+
+모든 프로바이더가 채팅 모델(BaseChatModel)이므로 토큰 스트리밍 이벤트
+(on_chat_model_stream)가 동일하게 발생합니다.
 """
 
 import logging
-from typing import Any
+
+from langchain_core.language_models import BaseChatModel
 
 from ai_server.config import settings
+from ai_server.llm.gemini_loader import get_gemini_llm
 
 logger = logging.getLogger("LLMFactory")
 
+# 보조 호출은 결정적 출력이 필요합니다.
+UTILITY_TEMPERATURE = 0.0
+# 사실 기반 답변의 일관성을 위해 생성용 기본값(0.8)보다 낮게 둡니다.
+ANSWER_TEMPERATURE = 0.5
 
-def get_llm() -> Any:
-    """
-    환경변수 LLM_PROVIDER에 맞는 LLM 인스턴스를 반환합니다.
+# temperature별 DeepSeek 인스턴스 캐시
+_deepseek_cache: dict[float, BaseChatModel] = {}
+_local_llm: BaseChatModel | None = None
 
-    로더 모듈이 모듈 수준 싱글턴을 보장하므로
-    이 함수를 여러 번 호출해도 모델이 재로드되지 않습니다.
 
-    Returns:
-        LangChain BaseChatModel 인스턴스.
-    """
-    provider = settings.model.provider
-    logger.info(f"LLM Provider: {provider}")
+def _get_deepseek_llm(temperature: float) -> BaseChatModel:
+    """DeepSeek API 채팅 모델을 반환합니다."""
+    if temperature not in _deepseek_cache:
+        api_key = settings.api.deepseek_api_key
+        if not api_key:
+            raise ValueError("DEEPSEEK_API_KEY가 환경변수에 설정되지 않았습니다.")
 
-    if provider == "gemini":
-        from ai_server.llm.gemini_loader import get_gemini_llm
-        return get_gemini_llm()
+        from langchain_deepseek import ChatDeepSeek
 
+        _deepseek_cache[temperature] = ChatDeepSeek(
+            model=settings.model.deepseek_model,
+            api_key=api_key,
+            temperature=temperature,
+        )
+        logger.info(
+            f"DeepSeek LLM 생성 완료. (model={settings.model.deepseek_model}, temperature={temperature})"
+        )
+    return _deepseek_cache[temperature]
+
+
+def _get_local_llm() -> BaseChatModel:
+    """OpenAI 호환 API로 서빙되는 로컬 모델 클라이언트를 반환합니다."""
+    global _local_llm
+
+    if _local_llm is None:
+        base_url = settings.model.local_llm_base_url
+        if not base_url:
+            raise ValueError(
+                "ANSWER_LLM_PROVIDER=local을 사용하려면 LOCAL_LLM_BASE_URL"
+                "(OpenAI 호환 서버 주소, 예: http://localhost:8002/v1)이 필요합니다."
+            )
+
+        from langchain_openai import ChatOpenAI
+
+        _local_llm = ChatOpenAI(
+            base_url=base_url,
+            api_key="EMPTY",  # vLLM 등 로컬 서버는 API 키를 검사하지 않습니다.
+            model=settings.model.local_llm_model,
+            temperature=ANSWER_TEMPERATURE,
+            # Qwen3의 사고 과정(<think>) 출력을 끄고 답변만 받습니다. (vLLM chat_template_kwargs)
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+        )
+        logger.info(f"로컬 LLM 클라이언트 생성 완료: {base_url}")
+
+    return _local_llm
+
+
+def get_utility_llm() -> BaseChatModel:
+    """질문 분류·검색어 재작성·캐릭터명 추출에 사용할 채팅 모델을 반환합니다."""
+    if settings.model.provider == "deepseek":
+        return _get_deepseek_llm(UTILITY_TEMPERATURE)
+    # 단순한 판단 작업이므로 사고(thinking)를 생략해 응답 지연을 줄입니다.
+    return get_gemini_llm(temperature=UTILITY_TEMPERATURE, thinking_budget=0)
+
+
+def get_answer_llm() -> BaseChatModel:
+    """최종 답변 생성에 사용할 채팅 모델을 반환합니다."""
+    provider = settings.model.answer_provider
     if provider == "local":
-        from ai_server.llm.llm_loader import get_local_llm
-        return get_local_llm()
-
-    logger.warning(f"알 수 없는 provider '{provider}'. 로컬 LLM으로 폴백합니다.")
-    from ai_server.llm.llm_loader import get_local_llm
-    return get_local_llm()
+        return _get_local_llm()
+    if provider == "deepseek":
+        return _get_deepseek_llm(ANSWER_TEMPERATURE)
+    return get_gemini_llm(temperature=ANSWER_TEMPERATURE)

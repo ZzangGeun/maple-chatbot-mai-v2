@@ -1,9 +1,11 @@
-# services/nexon/extractors.py
+# common/nexon/extractors.py
 """
 넥슨 API 응답 데이터 추출·변환 함수 모음
 
 각 함수는 API 응답 딕셔너리를 받아 정제된 딕셔너리를 반환합니다.
 I/O가 없는 순수 변환 함수이므로 단위 테스트가 용이합니다.
+all_info_extract의 결과는 캐릭터 검색 API 응답(프론트엔드 화면)으로 그대로 쓰이므로
+키 구조를 바꿀 때는 프론트엔드 사용처를 함께 확인해야 합니다.
 """
 
 import logging
@@ -366,12 +368,11 @@ def extract_hexamatrix(hexamatrix_info: dict) -> dict:
 
     hexamatrix_list = [
         {
-            "slot_id": hexa.get("slot_id", "정보 없음"),
-            "slot_level": hexa.get("slot_level", 0),
-            "main_stat_name": hexa.get("main_stat_name", "정보 없음"),
-            "main_stat_level": hexa.get("main_stat_level", 0),
+            "hexa_core_name": hexa.get("hexa_core_name", "정보 없음"),
+            "hexa_core_level": hexa.get("hexa_core_level", 0),
+            "hexa_core_type": hexa.get("hexa_core_type", "정보 없음"),
         }
-        for hexa in hexamatrix_info.get("hexamatrix", [])
+        for hexa in (hexamatrix_info.get("character_hexa_core_equipment") or [])
         if isinstance(hexa, dict)
     ]
 

@@ -1,8 +1,49 @@
 # AI 특화 API 명세서 (AI & RAG APIs)
 
-본 문서는 대화 기록(Session) 유지 없이 일회성 RAG 검색을 수행하거나, AI 기반 유저 맞춤형 추천 질문을 가져오는 API 스펙을 정의합니다.
+본 문서는 AI 서버(FastAPI)의 API 스펙을 정의합니다.
+0번은 Django가 호출하는 내부 대화 API이고, 1~3번은 대화 기록(Session) 유지 없이 일회성 RAG 검색을 수행하거나 AI 기반 유저 맞춤형 추천 질문을 가져오는 API입니다.
 
-* **Base URL:** `/api/v1/ai`
+---
+
+## 0. 대화 답변 생성 (내부 API: Django → AI 서버)
+
+AI 서버는 대화 기록을 저장하지 않습니다(stateless). Django가 매 요청마다 최근 대화와 사용자 정보를 함께 보냅니다.
+
+* **Endpoint:** `POST /generate` (한 번에 응답), `POST /stream` (SSE 스트리밍)
+
+### Request Body
+```json
+{
+  "session_id": "0b6f0c2e-...",
+  "message": "내 캐릭터 다음 스펙업 뭐 해?",
+  "history": [
+    {"role": "user", "content": "이전 질문"},
+    {"role": "assistant", "content": "이전 답변"}
+  ],
+  "user_context": {
+    "main_character": {"character_name": "아델은최강", "world_name": "스카니아", "ocid": "..."}
+  }
+}
+```
+
+* `history`: 오래된 순. AI 서버는 최근 `CHAT_HISTORY_MAX_MESSAGES`개(기본 10)만 사용하고, 메시지마다 `CHAT_HISTORY_MESSAGE_MAX_CHARS`자(기본 2000)까지 자릅니다.
+* `user_context`: 비로그인 사용자는 생략하거나 빈 객체입니다. `session_id`는 모니터링(Langfuse) 용도로만 쓰입니다.
+
+### Response Body — `/generate` (200 OK)
+```json
+{
+  "response": "최종 답변",
+  "route": "character_knowledge",
+  "sources": [{"index": 1, "title": "...", "url": "...", "category": "...", "date": "..."}]
+}
+```
+
+### Response — `/stream`
+`status` / `route` / `token` / `sources` / `error` 이벤트를 보내고 `data: [DONE]`으로 끝납니다. 이벤트 형식은 [chat-api.md 5번](./chat-api.md)과 같습니다 (Django가 그대로 중계).
+
+---
+
+* **Base URL (1~3번):** `/api/v1/ai`
 
 ---
 
