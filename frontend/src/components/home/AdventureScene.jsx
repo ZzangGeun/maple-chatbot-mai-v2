@@ -2,7 +2,7 @@ import React from 'react';
 
 // 외부 이미지 없이 해상도에 맞춰 선명하게 표시되는 모험 일러스트.
 const AdventureScene = () => (
-  <svg viewBox="0 0 480 350" className="adventure-scene" role="img" aria-label="작은 숲에서 함께 모험하는 초록 요정과 주황 버섯">
+  <svg viewBox="0 0 480 350" className="adventure-scene" role="img" aria-label="작은 숲에서 함께 모험하는 메이플스토리 슬라임과 주황 버섯">
     <ellipse cx="245" cy="303" rx="177" ry="20" fill="#dce4ce" opacity=".65" />
     <path d="M67 243Q241 215 413 243L386 286Q247 315 95 279Z" fill="#c6ac7b" stroke="#758257" strokeWidth="3" />
     <path d="M69 242Q233 194 415 243Q415 261 390 260Q368 278 348 262Q327 281 306 265Q279 283 255 267Q231 282 207 268Q180 279 158 264Q129 279 111 260Q81 269 69 242" fill="#a8c475" stroke="#758257" strokeWidth="3" strokeLinejoin="round" />
@@ -10,14 +10,34 @@ const AdventureScene = () => (
     <g stroke="#769159" strokeWidth="2.5" strokeLinecap="round"><path d="M104 224v-16m0 10-8-7m8 6 8-9M367 226v-19m0 9-8-6m8 9 10-10" /></g>
     <g className="scene-cloud" fill="#fffdf6"><path d="M34 92q-7-20 12-23q8-20 25-6q21-10 26 12q17 1 12 17Z" /><path d="M352 70q-7-17 9-19q8-16 22-6q15-6 20 11q14 2 11 14Z" /></g>
     <circle cx="386" cy="107" r="28" fill="#f4dba0" opacity=".7" />
-    <path d="M155 190Q152 159 169 148Q149 116 168 99Q184 84 202 95Q224 68 247 101Q276 96 286 119Q297 141 274 157Q297 202 277 228Q224 254 175 229Q155 220 155 190Z" fill="#c1da8d" stroke="#657a44" strokeWidth="3.5" />
-    <path d="M178 154Q165 177 174 188" fill="none" stroke="#edf5d3" strokeWidth="9" strokeLinecap="round" />
-    <path d="M214 100Q205 66 239 54Q256 85 225 102" fill="#7d9b50" stroke="#657a44" strokeWidth="3" />
-    <path d="M222 94l12-24" stroke="#b8cf84" strokeWidth="2.5" strokeLinecap="round" />
-    <ellipse cx="195" cy="192" rx="5" ry="7" fill="#3d4931" /><ellipse cx="243" cy="192" rx="5" ry="7" fill="#3d4931" />
-    <path d="M210 205q10 11 20 0" fill="none" stroke="#3d4931" strokeWidth="3" strokeLinecap="round" />
-    <ellipse cx="182" cy="206" rx="9" ry="5" fill="#edb09a" /><ellipse cx="255" cy="206" rx="9" ry="5" fill="#edb09a" />
-    <path d="M188 230q-11 17-20 5M255 231q8 13 18 4" fill="#c1da8d" stroke="#657a44" strokeWidth="3" strokeLinecap="round" />
+    {/* 메이플스토리 슬라임의 물방울 몸체와 구슬 달린 줄기. */}
+    <defs>
+      <radialGradient id="maple-slime-body" cx="38%" cy="31%" r="72%">
+        <stop offset="0%" stopColor="#d6fa86" />
+        <stop offset="48%" stopColor="#a9e852" />
+        <stop offset="82%" stopColor="#7ec237" />
+        <stop offset="100%" stopColor="#639d2b" />
+      </radialGradient>
+      <radialGradient id="maple-slime-orb" cx="34%" cy="28%" r="72%">
+        <stop offset="0%" stopColor="#e2fcaa" />
+        <stop offset="55%" stopColor="#a9e852" />
+        <stop offset="100%" stopColor="#639d2b" />
+      </radialGradient>
+    </defs>
+    <g className="scene-slime">
+      <ellipse cx="222" cy="246" rx="69" ry="9" fill="#718b48" opacity=".18" />
+      <path d="M214 125C219 100 205 80 185 87C158 96 176 160 155 190Q144 206 136 210" fill="none" stroke="#48652c" strokeWidth="2.2" strokeLinecap="round" />
+      <circle cx="135" cy="211" r="8" fill="url(#maple-slime-orb)" stroke="#48652c" strokeWidth="2.5" />
+      <ellipse cx="132" cy="208" rx="2.5" ry="2" fill="#f5ffd7" />
+      <path d="M214 121C223 139 246 143 263 156C282 170 293 190 291 210C289 233 267 246 224 247C182 248 158 235 154 213C149 190 160 168 181 151C195 140 205 132 214 121Z" fill="url(#maple-slime-body)" stroke="#52752f" strokeWidth="3.5" strokeLinejoin="round" />
+      <path d="M168 220C184 237 247 243 275 222" fill="none" stroke="#c7f275" strokeWidth="8" strokeLinecap="round" opacity=".7" />
+      <ellipse cx="181" cy="173" rx="12" ry="17" transform="rotate(34 181 173)" fill="#f8ffe2" opacity=".9" />
+      <ellipse cx="164" cy="199" rx="5.5" ry="7" transform="rotate(15 164 199)" fill="#f8ffe2" opacity=".8" />
+      <ellipse cx="204" cy="195" rx="7.5" ry="9" fill="#31451e" />
+      <ellipse cx="252" cy="190" rx="7.5" ry="9" fill="#31451e" />
+      <path d="M204 190v10m-4-5h8M252 185v10m-4-5h8" fill="none" stroke="#f4fb79" strokeWidth="2.4" strokeLinecap="round" />
+      <path d="M223 203q1 7 6 3q4 5 7-3" fill="none" stroke="#31451e" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
+    </g>
     <g className="scene-mushroom">
       <path d="M309 208q-6 30 2 36q20 10 40 0q8-9-3-35" fill="#fff0d6" stroke="#916946" strokeWidth="3" />
       <path d="M284 204Q280 166 309 150Q340 132 365 163Q380 182 375 203Q338 222 284 204Z" fill="#efa46b" stroke="#916946" strokeWidth="3" />

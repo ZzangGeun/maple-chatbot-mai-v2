@@ -40,17 +40,17 @@ async def trigger_embedding_sync(
     background_tasks: BackgroundTasks,
 ) -> EmbedSyncResponse:
     """
-    임베딩 동기화 강제 트리거 API 엔드포인트. (관리자 인증 필요)
+    지식 베이스(공략 문서·넥슨 공지) 적재 강제 트리거 API 엔드포인트. (관리자 인증 필요)
     """
     try:
-        from ai_server.rag.character_batch import run_character_embedding_batch
+        from ai_server.rag.ingest import run_scheduled_ingestion
 
-        # 백그라운드에서 임베딩 적재 구동하여 호출이 블로킹되지 않도록 처리
-        background_tasks.add_task(run_character_embedding_batch)
+        # 백그라운드에서 적재를 실행해 호출이 블로킹되지 않도록 처리
+        background_tasks.add_task(run_scheduled_ingestion)
 
         return EmbedSyncResponse(
-            task_id="task_embed_sync_manual",
-            message="벡터 DB 임베딩 동기화 작업이 백그라운드에서 시작되었습니다.",
+            task_id="task_knowledge_sync_manual",
+            message="지식 베이스 적재 작업이 백그라운드에서 시작되었습니다.",
         )
     except Exception as e:
         logger.error(f"임베딩 동기화 백그라운드 적재 실패: {e}")

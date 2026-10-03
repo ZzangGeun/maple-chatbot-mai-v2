@@ -4,7 +4,7 @@
 
 ## 주요 기능
 
-- **메이플스토리 지식 Q&A**: 공지·이벤트 등 게임 문서를 검색해 근거 문서 번호([1], [2])와 함께 답변합니다.
+- **메이플스토리 지식 Q&A**: 공략 문서와 넥슨 공지·업데이트·이벤트를 검색해 근거 문서 번호([1], [2])와 함께 답변합니다. "이번 이벤트"처럼 시점을 묻는 질문은 끝난 이벤트를 빼고 최근 문서를 우대합니다.
 - **캐릭터 정보 조회**: 질문 속 캐릭터를 넥슨 Open API로 조회해 답변에 활용합니다.
   - 로그인 사용자는 "내 캐릭터"로 물으면 대표 캐릭터를 조회합니다.
   - 질문에 필요한 정보(스탯, 장비, 심볼, HEXA, 유니온 등)만 골라서 조회합니다.
@@ -24,7 +24,7 @@ Django :8000 ── 인증·세션, 대화 기록 저장, 넥슨 Open API (Postg
    ▼
 AI 서버 (FastAPI + LangGraph) :8001 ── 대화 기록을 저장하지 않음(stateless)
    ├─ LLM: Gemini / DeepSeek / 로컬 모델(OpenAI 호환 서버)
-   ├─ 지식 검색: pgvector + BM25
+   ├─ 지식 검색: pgvector 벡터 검색 + 한국어 형태소(Kiwi) BM25 하이브리드
    └─ 캐릭터 조회: 넥슨 Open API
 ```
 
@@ -36,7 +36,7 @@ Django와 AI 서버를 분리한 이유는 [ADR 001](docs/adr/001_use_fastapi.md
 
 - Python 3.11, Node.js 18 이상
 - Docker (PostgreSQL + pgvector, Redis 실행용)
-- API 키: 넥슨 Open API 키, Gemini API 키(`GOOGLE_API_KEY`) 또는 DeepSeek API 키
+- API 키: 넥슨 Open API 키, DeepSeek API 키(`DEEPSEEK_API_KEY`, 기본 LLM) 또는 Gemini API 키
 
 ### 1. 환경 변수 파일 만들기
 
@@ -89,17 +89,29 @@ http://localhost:8000 에서 Django가 빌드된 프론트엔드(`static/dist/`)
 
 ### 3. 지식 검색 데이터 준비 (선택)
 
-지식 질문에 답하려면 벡터 DB에 문서가 있어야 합니다. 원본 데이터 폴더(`data/`, `rag_documents/`)는 git에 포함되어 있지 않습니다.
+지식 질문에 답하려면 벡터 DB(pgvector)에 문서가 있어야 합니다. 지식 베이스는 두 가지 자료로 만듭니다.
+
+- **공략 문서**: [`knowledge/guides/`](knowledge/guides/README.md)의 마크다운 문서. `status: reviewed`인 문서만 적재합니다.
+- **넥슨 공지**: 넥슨 Open API의 공지·업데이트·이벤트·캐시샵 공지 본문.
 
 ```bash
-# 넥슨 Open API에서 최신 공지·이벤트를 가져와 Redis(rag_docs:notices)에 저장
-python manage.py shell -c "from apps.core.services import sync_notices_to_rag; sync_notices_to_rag()"
-
-# rag_documents/**/*.json과 Redis의 rag_docs:* 문서를 임베딩해 pgvector에 적재
-python -m ai_server.rag.vectorstore
+python -m ai_server.rag.ingest                     # 공략 문서 + 넥슨 공지 적재
+python -m ai_server.rag.ingest --sources guides    # 공략 문서만
+python -m ai_server.rag.ingest --include-drafts    # 검토 전(draft) 공략 문서도 적재 (개발용)
+python -m ai_server.rag.ingest --dry-run           # DB·API 없이 문서·청크 수만 확인
 ```
 
-처음 실행하면 임베딩 모델(`Qwen/Qwen3-Embedding-0.6B`, 1GB 이상)을 내려받습니다. 적재 스크립트는 기존 문서를 지우지 않으므로, 여러 번 실행하면 문서가 중복으로 쌓입니다.
+- 처음 실행하면 임베딩 모델(`Qwen/Qwen3-Embedding-0.6B`, 1GB 이상)을 내려받습니다.
+- 문서마다 내용 해시를 비교해 **바뀐 문서만 다시 임베딩**합니다. 공략 문서 폴더에서 지운 문서는 벡터 DB에서도 지워집니다.
+- AI 서버가 켜져 있으면 `RAG_SYNC_INTERVAL_HOURS`(기본 6시간)마다 같은 적재를 자동으로 실행합니다.
+- pgvector 확장이 있는 DB가 필요합니다. Docker의 `db` 서비스(`ankane/pgvector`)를 쓰세요. pgvector가 없는 PostgreSQL에서는 벡터 검색을 쓸 수 없습니다.
+
+검색 품질은 평가셋(공략 문서 기준 질문 51개)으로 확인합니다.
+
+```bash
+python -m ai_server.rag.evaluation.retrieval_eval             # 키워드 검색만 (DB·모델 불필요)
+python -m ai_server.rag.evaluation.retrieval_eval --index pg  # 운영 인덱스 (벡터 + 키워드)
+```
 
 ## 환경 설정
 
@@ -109,14 +121,20 @@ python -m ai_server.rag.vectorstore
 | :--- | :---: | :--- |
 | `SECRET_KEY` | ✅ | Django·AI 서버 공용 비밀 키. 테스트 실행에도 필요합니다. |
 | `DATABASE_*` | ✅ | PostgreSQL 접속 정보 (`DATABASE_HOST=127.0.0.1`은 로컬 개발 기준) |
-| `REDIS_URL` | ✅ | 공지·랭킹 캐시와 RAG용 공지 문서 저장소 |
+| `REDIS_URL` | ✅ | 공지·랭킹 캐시, 넥슨 API 응답 캐시 |
+| `COLLECTION_NAME` |  | 지식 베이스 벡터 컬렉션 이름 (기본 `maplestory_documents_docs`) |
+| `RAG_INCLUDE_DRAFT_GUIDES` |  | 검토 전(draft) 공략 문서도 적재 (개발용, 기본 `False`) |
+| `RAG_NOTICE_LIMIT` |  | 공지 종류별로 가져올 최신 공지 수 (기본 20) |
+| `RAG_SYNC_INTERVAL_HOURS` |  | 공략 문서·공지 정기 적재 주기(시간), 0이면 끔 (기본 6) |
 | `NEXON_API_KEY` | ✅ | 캐릭터 검색·연동, 공지·랭킹 조회 |
 | `NEXON_REQUESTS_PER_SECOND` |  | 넥슨 API 초당 요청 수 상한(서버 프로세스마다 적용). 기본 5는 개발 단계 키 기준이며, 서비스 단계 키로 바꾸면 올립니다. |
 | `NEXON_CACHE_ENABLED` |  | 넥슨 API 응답을 Redis에 캐싱해 Django와 AI 서버가 공유 (기본 `True`) |
-| `LLM_PROVIDER` |  | 질문 분류·검색어 재작성·캐릭터명 추출과 기본 답변 생성 모델: `gemini`(기본) \| `deepseek` |
+| `LLM_PROVIDER` |  | 질문 분류·검색어 재작성·캐릭터명 추출과 기본 답변 생성 모델: `deepseek`(기본) \| `gemini` |
 | `ANSWER_LLM_PROVIDER` |  | 답변 생성만 다른 모델로 바꿀 때: `gemini` \| `deepseek` \| `local` (비우면 `LLM_PROVIDER`) |
 | `GOOGLE_API_KEY` / `GEMINI_MODEL` | Gemini 사용 시 | Gemini API 키와 모델명 (기본 `gemini-2.5-flash`) |
-| `DEEPSEEK_API_KEY` / `DEEPSEEK_MODEL` | DeepSeek 사용 시 | DeepSeek API 키와 모델명 (기본 `deepseek-chat`) |
+| `DEEPSEEK_API_KEY` / `DEEPSEEK_MODEL` | DeepSeek 사용 시 | DeepSeek API 키와 모델명 (기본 `deepseek-flash`) |
+| `DEEPSEEK_API_BASE` |  | OpenAI 호환 Chat Completions API 주소 (기본 `https://api.deepseek.com`) |
+| `DEEPSEEK_THINKING_ENABLED` |  | 답변 생성의 사고 모드 (기본 `False`, 분류·추출은 항상 비활성화) |
 | `LOCAL_LLM_BASE_URL` / `LOCAL_LLM_MODEL` | local 사용 시 | OpenAI 호환 서버 주소와 모델명 |
 | `CHAT_HISTORY_MAX_MESSAGES` |  | 프롬프트에 넣을 이전 대화 수 (기본 10) |
 | `AI_SERVER_URL` |  | Django가 호출할 AI 서버 주소 (기본 `http://127.0.0.1:8001`) |
@@ -127,7 +145,20 @@ python -m ai_server.rag.vectorstore
 
 ### LLM 바꾸기
 
-- **DeepSeek**: `LLM_PROVIDER=deepseek`와 `DEEPSEEK_API_KEY`를 설정합니다. 질문 분류 등 보조 호출과 답변 생성이 모두 DeepSeek로 바뀝니다. 실제 DeepSeek API로는 아직 검증하지 않았으므로, 전환할 때 한 번 대화해 보고 확인하세요.
+- **DeepSeek (기본)**: 질문 분류·검색어 재작성·캐릭터명 추출과 답변 생성이 모두 `deepseek-flash`를 사용합니다. 기존 `ChatDeepSeek` 어댑터는 OpenAI 호환 Chat Completions와 function calling 구조화 출력을 사용하므로 그래프·스트리밍 코드는 유지합니다.
+
+  `env/.env.local`의 `DEEPSEEK_API_KEY`를 채우고 아래 설정을 사용한 뒤 AI 서버를 재시작하세요. Docker Compose는 파일 변경만으로 기존 컨테이너의 환경 변수가 갱신되지 않으므로 `docker compose --env-file env/.env.local up -d --force-recreate fastapi`로 다시 생성합니다.
+
+  ```env
+  LLM_PROVIDER=deepseek
+  ANSWER_LLM_PROVIDER=deepseek
+  DEEPSEEK_MODEL=deepseek-flash
+  DEEPSEEK_API_BASE=https://api.deepseek.com
+  DEEPSEEK_THINKING_ENABLED=False
+  ```
+
+  답변 생성에서 사고 모드를 사용하려면 `DEEPSEEK_THINKING_ENABLED=True`로 바꿉니다. 분류·추출은 계속 비사고 모드이며, 사고 모드에는 `temperature`를 보내지 않습니다. 실제 DeepSeek API 호출은 별도로 대화하여 확인하세요. [모델 안내](https://api-docs.deepseek.com/updates/), [사고 모드 안내](https://api-docs.deepseek.com/guides/thinking_mode/)
+- **Gemini**: `LLM_PROVIDER=gemini`, `ANSWER_LLM_PROVIDER=gemini`와 `GOOGLE_API_KEY`를 설정하면 기존 Gemini 경로를 사용합니다.
 - **파인튜닝한 로컬 모델**: 모델을 OpenAI 호환 서버로 띄우고 답변 생성에만 사용합니다. 보조 호출은 `LLM_PROVIDER` 모델을 그대로 씁니다. vLLM은 Linux/WSL에서 실행됩니다.
 
   ```bash
@@ -154,6 +185,11 @@ python -m ai_server.rag.vectorstore
           ├─ character: 질문 분석 → 넥슨 API 조회·요약 ─┼─▶ generate (답변 스트리밍)
           └─ character_knowledge: 위 두 경로를 병렬 실행┘
    ```
+
+   지식 경로는 이렇게 동작합니다.
+   - **검색**: 벡터 검색(의미)과 형태소 기반 BM25(키워드)를 따로 돌린 뒤 RRF로 순위를 합칩니다. 한쪽이 실패하면 다른 쪽 결과로 답합니다.
+   - **시점 질문**: "이번", "진행 중" 같은 표현이 있으면 끝난 이벤트는 빼고 최근 문서를 우대합니다.
+   - **출처**: 같은 문서에서 나온 조각은 하나의 번호([1])로 묶어 답변과 `sources` 이벤트에 넘깁니다.
 
    캐릭터 경로는 이렇게 동작합니다.
    - **조회 대상**: 질문 속 캐릭터명을 우선합니다. 없거나 "내 캐릭터"를 물으면 대표 캐릭터를 조회합니다.
@@ -191,14 +227,15 @@ MAI_Help_You/
 │   │   └── tools/           #     캐릭터 정보 → 답변용 요약 (character_context.py)
 │   ├── llm/                 #   모델 팩토리 (Gemini / DeepSeek / 로컬)
 │   ├── prompts/             #   프롬프트 템플릿 (PromptTemplate Enum)
-│   ├── rag/                 #   문서 로더·임베딩·pgvector·검색기·배치·평가
+│   ├── rag/                 #   지식 베이스: 수집(sources)·청킹·적재(ingest)·하이브리드 검색·평가
 │   ├── schemas/             #   요청/응답 스키마 (Pydantic)
 │   └── common/observability/ #  Langfuse 연동
 ├── frontend/                # React 18 + Vite (빌드 결과는 static/dist/)
 ├── static/dist/             # 프론트엔드 빌드 결과 (Django가 서빙, git에 포함)
 ├── tests/                   # pytest 테스트
 ├── docs/                    # 기획·설계 문서, API 명세, ADR
-├── data/, rag_documents/    # RAG 원본 데이터 (git 미포함)
+├── knowledge/guides/        # RAG 공략 문서 (마크다운, 검토 후 적재)
+├── data/                    # 로컬 자료 (git 미포함, 보스·직업 목록 JSON은 --sources json으로 적재 가능)
 ├── fine_tuned_model/        # 파인튜닝한 Qwen 모델 (git 미포함)
 ├── docker-compose.yml       # db(pgvector) · redis · django · fastapi
 └── requirements.txt
@@ -230,7 +267,8 @@ AI 서버 설정을 불러오므로 테스트에도 `SECRET_KEY`가 있는 환�
 - **LLM 호출 한도**: Gemini 무료 등급은 모델별로 분당 5회, 하루 20회까지만 호출할 수 있습니다. 질문 1건에 2~4회를 호출하므로, 실서비스에는 유료 등급 또는 DeepSeek 전환이 필요합니다.
 - **넥슨 API 호출 한도**: 개발 단계 키는 초당 호출 한도가 낮아 클라이언트가 초당 5건으로 속도를 맞춥니다. 서비스 전에 서비스 단계 키로 전환하고 `NEXON_REQUESTS_PER_SECOND`를 올려야 합니다.
 - **캐릭터 연동(인증 코드)**: 넥슨 Open API의 캐릭터 기본 정보에는 인게임 소개글 필드가 없습니다. 그래서 소개글에 인증 코드를 넣는 연동 방식은 실제 API로는 통과하지 않습니다. 대표 캐릭터는 현재 회원가입 때 넥슨 API 키로 확인한 캐릭터를 사용합니다.
-- **지식 베이스**: 공지·랭킹·보스/직업 목록 위주라 공략 문서가 부족하고, 검색이 BM25 위주입니다. 캐릭터 데이터도 같은 컬렉션에 섞여 있습니다. 수집 파이프라인 정비와 하이브리드 검색으로 개선할 예정입니다.
+- **공략 문서**: `knowledge/guides/`의 문서는 모두 초안(draft)이라 기본 설정에서는 적재되지 않습니다. 확률·비용·최대 단계처럼 패치로 바뀌는 수치는 비워 두었으므로(`⚠️ 검토 필요`), 공식 자료와 대조해 채운 뒤 `status: reviewed`로 바꿔야 챗봇이 사용합니다.
+- **검색 품질 측정**: 현재 평가셋은 공략 문서와 같은 사람이 함께 만든 질문이라 수치가 실제보다 좋게 나올 수 있습니다. 실제 사용자 질문을 모아 평가셋을 늘려야 합니다.
 - **프론트엔드**: `status`, `sources` 이벤트는 아직 화면에 표시하지 않습니다.
 - **운영 배포**: 채팅 세션 소유권 확인, 요청 횟수 제한, AI 서버 내부 인증, ASGI 운영 서버 구성은 배포 전에 추가할 예정입니다.
 

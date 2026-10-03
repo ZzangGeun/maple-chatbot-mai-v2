@@ -11,8 +11,8 @@ LLM 팩토리 모듈
 
 프로바이더:
   "gemini"  → Gemini API
-  "deepseek"→ DeepSeek API (ChatDeepSeek: DeepSeek이 지원하지 않는 json_schema 구조화 출력을
-              function calling으로 바꿔 호출하므로 노드 코드는 그대로 사용할 수 있습니다)
+  "deepseek"→ DeepSeek의 OpenAI 호환 Chat Completions API
+              (ChatDeepSeek의 function calling 구조화 출력으로 기존 노드를 유지합니다)
   "local"   → OpenAI 호환 API로 서빙되는 로컬 모델 (답변 생성 전용)
               (예: vllm serve fine_tuned_model/merged_qwen --served-model-name merged_qwen)
 
@@ -34,29 +34,41 @@ UTILITY_TEMPERATURE = 0.0
 # 사실 기반 답변의 일관성을 위해 생성용 기본값(0.8)보다 낮게 둡니다.
 ANSWER_TEMPERATURE = 0.5
 
-# temperature별 DeepSeek 인스턴스 캐시
-_deepseek_cache: dict[float, BaseChatModel] = {}
+# (temperature, 사고 모드)별 DeepSeek 인스턴스 캐시
+_deepseek_cache: dict[tuple[float, bool], BaseChatModel] = {}
 _local_llm: BaseChatModel | None = None
 
 
-def _get_deepseek_llm(temperature: float) -> BaseChatModel:
-    """DeepSeek API 채팅 모델을 반환합니다."""
-    if temperature not in _deepseek_cache:
+def _get_deepseek_llm(
+    temperature: float, thinking_enabled: bool = False
+) -> BaseChatModel:
+    """DeepSeek API 모델을 온도와 사고 모드별로 재사용합니다."""
+    key = (temperature, thinking_enabled)
+    if key not in _deepseek_cache:
         api_key = settings.api.deepseek_api_key
         if not api_key:
             raise ValueError("DEEPSEEK_API_KEY가 환경변수에 설정되지 않았습니다.")
 
         from langchain_deepseek import ChatDeepSeek
 
-        _deepseek_cache[temperature] = ChatDeepSeek(
+        _deepseek_cache[key] = ChatDeepSeek(
             model=settings.model.deepseek_model,
             api_key=api_key,
-            temperature=temperature,
+            api_base=settings.model.deepseek_api_base,
+            # 사고 모드에서는 temperature가 적용되지 않습니다.
+            temperature=None if thinking_enabled else temperature,
+            # deepseek-flash의 기본 사고 모드를 요청마다 명시적으로 선택합니다.
+            extra_body={
+                "thinking": {"type": "enabled" if thinking_enabled else "disabled"}
+            },
         )
         logger.info(
-            f"DeepSeek LLM 생성 완료. (model={settings.model.deepseek_model}, temperature={temperature})"
+            "DeepSeek LLM 생성 완료. (model=%s, temperature=%s, thinking=%s)",
+            settings.model.deepseek_model,
+            _deepseek_cache[key].temperature,
+            thinking_enabled,
         )
-    return _deepseek_cache[temperature]
+    return _deepseek_cache[key]
 
 
 def _get_local_llm() -> BaseChatModel:
@@ -100,5 +112,8 @@ def get_answer_llm() -> BaseChatModel:
     if provider == "local":
         return _get_local_llm()
     if provider == "deepseek":
-        return _get_deepseek_llm(ANSWER_TEMPERATURE)
+        return _get_deepseek_llm(
+            ANSWER_TEMPERATURE,
+            thinking_enabled=settings.model.deepseek_thinking_enabled,
+        )
     return get_gemini_llm(temperature=ANSWER_TEMPERATURE)

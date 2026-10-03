@@ -5,7 +5,7 @@ Django 캐릭터 서비스 테스트 (공용 넥슨 클라이언트 연동)
 - 캐릭터 검색 데이터 조회 (apps.character.nexon.character_service)
 - 회원가입 시 대표 캐릭터 확인
 - 캐릭터 연동 인증의 오류 분류 (apps.character.services)
-넥슨 API는 가짜 클라이언트로 대체하고, JSON 파일은 저장하지 않습니다.
+넥슨 API는 가짜 클라이언트로 대체합니다.
 """
 
 from typing import Any
@@ -28,16 +28,10 @@ BASIC = {"character_name": "검색캐릭", "world_name": "루나", "character_le
 
 
 @pytest.fixture(autouse=True)
-def _clean_cache_and_files(monkeypatch: pytest.MonkeyPatch):
-    """Django 캐시를 비우고, 테스트 중 JSON 파일이 저장되지 않게 합니다."""
+def _clean_cache():
+    """테스트마다 Django 캐시를 비웁니다."""
     cache.clear()
-    saved: list = []
-    monkeypatch.setattr(
-        character_service,
-        "save_character_data_to_json",
-        lambda name, data, *args, **kwargs: saved.append(name),
-    )
-    yield saved
+    yield
     cache.clear()
 
 
@@ -55,9 +49,7 @@ def _fake_client(**methods: Any) -> MagicMock:
 
 
 @pytest.mark.asyncio
-async def test_get_character_data_extracts_and_caches(
-    monkeypatch: pytest.MonkeyPatch, _clean_cache_and_files: list
-) -> None:
+async def test_get_character_data_extracts_and_caches(monkeypatch: pytest.MonkeyPatch) -> None:
     fetch = AsyncMock(
         return_value=CharacterFetchResult(
             ocid="ocid-1",
@@ -80,7 +72,6 @@ async def test_get_character_data_extracts_and_caches(
     fetch.assert_awaited_once()
     assert list(fetch.await_args.args[0]) == list(CHARACTER_INFO_ENDPOINTS.values())
     assert second == first
-    assert _clean_cache_and_files == ["검색캐릭"]
 
 
 @pytest.mark.asyncio

@@ -256,6 +256,11 @@ class NexonClient:
             raise next(iter(result.failed.values()))
         return result
 
+    async def get_json(self, path: str, params: dict[str, Any] | None = None) -> dict:
+        """캐릭터와 무관한 엔드포인트(공지사항 등)를 조회합니다. (캐시하지 않음)"""
+        async with self._session() as session:
+            return await self._request(session, path, params or {})
+
     async def get_account_characters(self) -> list[dict]:
         """이 클라이언트의 API 키를 발급한 계정의 모든 캐릭터 목록을 반환합니다. (캐시하지 않음)"""
         async with self._session() as session:

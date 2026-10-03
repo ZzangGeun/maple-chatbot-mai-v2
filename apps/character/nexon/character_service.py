@@ -7,10 +7,8 @@ HTTP 호출과 응답 캐시(Redis, AI 서버와 공유)는 공용 넥슨 클라
 응답 정제는 common.nexon.extractors에 위임합니다.
 """
 
-import json
 import logging
-from datetime import datetime, timedelta
-from pathlib import Path
+from datetime import timedelta
 
 from django.conf import settings
 from django.core.cache import cache
@@ -48,43 +46,6 @@ def get_nexon_client(api_key: str | None = None) -> NexonClient:
     )
 
 
-def save_character_data_to_json(
-    character_name: str,
-    character_data: dict,
-    save_dir: str = "data/character_data",
-) -> str | None:
-    """
-    캐릭터 데이터를 JSON 파일로 저장합니다.
-
-    Args:
-        character_name: 파일명에 사용할 캐릭터 이름.
-        character_data: 저장할 데이터 딕셔너리.
-        save_dir: 저장 디렉터리 경로 (기본값: "data/character_data").
-
-    Returns:
-        저장된 파일 경로 문자열, 실패 시 None.
-    """
-    try:
-        save_path = Path(save_dir)
-        save_path.mkdir(parents=True, exist_ok=True)
-
-        # 파일시스템에 안전한 문자만 허용합니다.
-        safe_name = "".join(
-            c for c in character_name if c.isalnum() or c in (" ", "-", "_")
-        ).rstrip()
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        file_path = save_path / f"{safe_name}_{timestamp}.json"
-
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(character_data, f, ensure_ascii=False, indent=2)
-
-        return str(file_path)
-
-    except OSError as e:
-        logger.error(f"JSON 파일 저장 중 오류 발생: {e}")
-        return None
-
-
 async def get_character_data(
     character_name: str,
     api_key: str | None = None,
@@ -96,7 +57,7 @@ async def get_character_data(
       1. 정제된 정보 캐시 확인 (Django 캐시)
       2. 캐시 미스 → 넥슨 API 조회 (엔드포인트 응답은 Redis에 따로 캐싱)
       3. 데이터 추출 및 정제
-      4. 캐시 저장 + JSON 파일 저장
+      4. 캐시 저장
 
     Args:
         character_name: 조회할 캐릭터 이름.
@@ -135,9 +96,8 @@ async def get_character_data(
     # 3. 데이터 추출
     extracted_info = all_info_extract(raw_info)
 
-    # 4. 캐시 저장 및 JSON 파일 백업
+    # 4. 캐시 저장
     cache.set(cache_key, extracted_info, timeout=int(CACHE_DURATION.total_seconds()))
-    save_character_data_to_json(character_name, extracted_info)
 
     return extracted_info
 

@@ -38,13 +38,17 @@ NEXON_CACHE_ENABLED=True
 
 # 5. AI & LLM Settings
 # 보조 호출(질문 분류·검색어 재작성·캐릭터명 추출)과 기본 답변 생성에 쓸 모델: gemini | deepseek
-LLM_PROVIDER=gemini
+LLM_PROVIDER=deepseek
 # 답변 생성만 다른 모델로 바꿀 때 (비우면 LLM_PROVIDER와 같음): gemini | deepseek | local
-ANSWER_LLM_PROVIDER=
+ANSWER_LLM_PROVIDER=deepseek
 GOOGLE_API_KEY=AIzaSyYourGeminiApiKeyHere
 GEMINI_MODEL=gemini-2.5-flash
 DEEPSEEK_API_KEY=sk-your-deepseek-api-key
-DEEPSEEK_MODEL=deepseek-chat
+DEEPSEEK_MODEL=deepseek-flash
+# OpenAI 호환 Chat Completions API
+DEEPSEEK_API_BASE=https://api.deepseek.com
+# 답변 생성의 사고 모드 (분류·추출은 항상 끔)
+DEEPSEEK_THINKING_ENABLED=False
 # ANSWER_LLM_PROVIDER=local: OpenAI 호환 서버로 띄운 로컬 모델 (예: vllm serve fine_tuned_model/merged_qwen --served-model-name merged_qwen)
 LOCAL_LLM_BASE_URL=http://localhost:8002/v1
 LOCAL_LLM_MODEL=merged_qwen
@@ -54,10 +58,15 @@ CHAT_HISTORY_MESSAGE_MAX_CHARS=2000
 # Django가 호출할 AI 서버 주소
 AI_SERVER_URL=http://localhost:8001
 
-# 6. Vector Database Settings
-CHROMA_DB_PATH=/app/data/chromadb
-PINECONE_API_KEY=your_pinecone_api_key
-PINECONE_ENVIRONMENT=us-west1-gcp
+# 6. RAG 지식 베이스 (pgvector)
+# 벡터 컬렉션 이름 (DB는 위 Database Connection의 PostgreSQL + pgvector 확장)
+COLLECTION_NAME=maplestory_documents_docs
+# 검토 전(status: draft) 공략 문서도 적재할지 (개발용, 운영에서는 False)
+RAG_INCLUDE_DRAFT_GUIDES=False
+# 공지 종류별로 가져올 최신 공지 수
+RAG_NOTICE_LIMIT=20
+# 공략 문서·공지 정기 적재 주기(시간), 0이면 끔
+RAG_SYNC_INTERVAL_HOURS=6
 
 # 7. JWT Settings
 JWT_SECRET_KEY=your-jwt-signing-secret-key
@@ -72,6 +81,10 @@ ADS_SLOT_LEADERBOARD=1234567890
 ADS_SLOT_MEDIUM_RECT=2345678901
 ADS_SLOT_SKYSCRAPER=3456789012
 ```
+
+AI 서버는 `env/.env.local`이 있으면 해당 파일을 읽고, 없으면 루트 `.env`를 읽습니다. OS 환경 변수는 파일보다 우선합니다. 두 예제 파일(`.env.example`, `env/.env.example`)은 동일한 설정을 제공합니다. API 키는 기존 값을 유지하고 `DEEPSEEK_MODEL=deepseek-flash`를 사용합니다.
+
+`DEEPSEEK_THINKING_ENABLED=False`는 API 요청에 `thinking.type=disabled`를 명시합니다. `True`로 바꾸면 답변 생성에만 사고 모드가 적용되고, 질문 분류·캐릭터 추출은 비사고 모드로 유지됩니다. AI 서버 재시작이 필요하며, Docker Compose에서는 `fastapi` 컨테이너를 다시 생성해야 env 변경이 반영됩니다.
 
 Vite 개발 서버만 단독으로 실행할 때는 `frontend/.env.local`에 아래 값을 설정합니다.
 

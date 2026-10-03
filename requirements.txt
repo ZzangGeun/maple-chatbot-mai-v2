@@ -20,22 +20,22 @@ redis==7.4.0
 
 # Environment
 python-dotenv==1.0.0
+PyYAML==6.0.3  # 공략 문서 머리말
 
 # LangChain / LangGraph
 langchain-community==0.4.1
 langchain-core==1.2.26
-langchain-deepseek==1.0.1  # LLM_PROVIDER=deepseek
+langchain-deepseek==1.0.1  # DeepSeek: OpenAI 호환 Chat Completions와 구조화 출력
 langchain-google-genai==4.2.1
-langchain-huggingface==1.2.1
 langchain-openai==1.1.10  # ANSWER_LLM_PROVIDER=local: OpenAI 호환 API로 서빙되는 로컬 모델 호출
 langchain-postgres==0.0.17
 langchain-text-splitters==1.1.1
 langgraph==1.1.6
 rank-bm25==0.2.2
+kiwipiepy==0.24.0  # BM25 키워드 검색용 한국어 형태소 분석
 langfuse==4.3.1
 
 # AI / ML
-accelerate==1.13.0
 numpy<2.0.0
 sentence-transformers
 torch==2.11.0

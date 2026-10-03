@@ -68,20 +68,20 @@ class ModelSettings(BaseModel):
       - answer_provider (ANSWER_LLM_PROVIDER): 답변 생성만 다른 모델로 바꿀 때 (비우면 LLM_PROVIDER와 같음)
 
     provider 값:
-      - "gemini"  : Gemini API (기본값, GOOGLE_API_KEY 필요)
-      - "deepseek": DeepSeek API (DEEPSEEK_API_KEY 필요)
+      - "gemini"  : Gemini API (GOOGLE_API_KEY 필요)
+      - "deepseek": DeepSeek API (기본값, DEEPSEEK_API_KEY 필요)
       - "local"   : OpenAI 호환 API로 서빙되는 로컬 모델 (vLLM 등, LOCAL_LLM_BASE_URL 필요).
                     구조화 출력이 필요한 보조 호출에는 쓰지 않고 답변 생성에만 사용할 수 있습니다.
     허용되지 않은 값이면 서버 시작 시 설정 검증 오류가 발생합니다.
     """
 
     provider: Literal["gemini", "deepseek"] = Field(
-        default_factory=lambda: os.getenv("LLM_PROVIDER", "gemini").lower(),
+        default_factory=lambda: os.getenv("LLM_PROVIDER", "deepseek").lower(),
         validate_default=True,
     )
     answer_provider: Literal["gemini", "deepseek", "local"] = Field(
         default_factory=lambda: (
-            os.getenv("ANSWER_LLM_PROVIDER") or os.getenv("LLM_PROVIDER", "gemini")
+            os.getenv("ANSWER_LLM_PROVIDER") or os.getenv("LLM_PROVIDER", "deepseek")
         ).lower(),
         validate_default=True,
     )
@@ -89,7 +89,16 @@ class ModelSettings(BaseModel):
         default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     )
     deepseek_model: str = Field(
-        default_factory=lambda: os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+        default_factory=lambda: os.getenv("DEEPSEEK_MODEL", "deepseek-flash")
+    )
+    deepseek_api_base: str = Field(
+        default_factory=lambda: (
+            os.getenv("DEEPSEEK_API_BASE", "").strip() or "https://api.deepseek.com"
+        )
+    )
+    # 답변 생성의 사고 모드만 선택합니다. 분류·추출은 항상 비활성화합니다.
+    deepseek_thinking_enabled: bool = Field(
+        default_factory=lambda: _env_flag("DEEPSEEK_THINKING_ENABLED")
     )
     local_llm_base_url: str = Field(
         default_factory=lambda: os.getenv("LOCAL_LLM_BASE_URL", "")
@@ -97,8 +106,6 @@ class ModelSettings(BaseModel):
     local_llm_model: str = Field(
         default_factory=lambda: os.getenv("LOCAL_LLM_MODEL", "merged_qwen")
     )
-    model_path: str = Field(default_factory=lambda: os.getenv("MODEL_PATH", ""))
-    base_model: str = Field(default_factory=lambda: os.getenv("BASE_MODEL", ""))
 
 
 class ChatSettings(BaseModel):
@@ -111,6 +118,29 @@ class ChatSettings(BaseModel):
     # 이전 대화 메시지 하나당 최대 글자 수 (긴 답변이 토큰을 과도하게 쓰지 않도록 자릅니다)
     history_message_max_chars: int = Field(
         default_factory=lambda: int(os.getenv("CHAT_HISTORY_MESSAGE_MAX_CHARS", "2000"))
+    )
+
+
+def _env_flag(name: str, default: str = "False") -> bool:
+    return os.getenv(name, default).lower() in ("true", "1", "yes")
+
+
+class RagSettings(BaseModel):
+    """RAG 지식 베이스 설정."""
+
+    # 공략 문서 폴더 (knowledge/guides/*.md)
+    guides_dir: str = Field(
+        default_factory=lambda: os.getenv("RAG_GUIDES_DIR", str(BASE_DIR / "knowledge" / "guides"))
+    )
+    # 검토 전(status: draft) 공략 문서도 적재할지 (개발용, 운영에서는 False)
+    include_draft_guides: bool = Field(
+        default_factory=lambda: _env_flag("RAG_INCLUDE_DRAFT_GUIDES")
+    )
+    # 공지 종류별로 가져올 최신 공지 수
+    notice_limit: int = Field(default_factory=lambda: int(os.getenv("RAG_NOTICE_LIMIT", "20")))
+    # 공략 문서·공지 정기 적재 주기(시간). 0이면 정기 적재를 하지 않습니다.
+    sync_interval_hours: float = Field(
+        default_factory=lambda: float(os.getenv("RAG_SYNC_INTERVAL_HOURS", "6"))
     )
 
 
@@ -174,6 +204,7 @@ class Settings(BaseModel):
     db: DatabaseSettings = Field(default_factory=DatabaseSettings)
     model: ModelSettings = Field(default_factory=ModelSettings)
     chat: ChatSettings = Field(default_factory=ChatSettings)
+    rag: RagSettings = Field(default_factory=RagSettings)
     api: ApiSettings = Field(default_factory=ApiSettings)
     langfuse: LangfuseSettings = Field(default_factory=LangfuseSettings)
 

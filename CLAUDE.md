@@ -64,7 +64,7 @@ Django owns all conversation state. Each AI request carries `message`, the recen
 - Shared cross-app code is in `common/`: custom exceptions (`common/exceptions/`) are converted to responses by `common.middleware.error_handler.ErrorHandlerMiddleware`; a standard response schema is in `common/schemas/response.py`.
 
 ### AI server (`ai_server/`)
-- `main.py` → `lifespan.py`: builds the main graph (no checkpointer) into `app.state.graph`, then runs registered startup handlers (an APScheduler job for character embeddings at 04:00 KST, Langfuse observability). Handlers are flagged critical/non-critical in `_STARTUP_HANDLERS`; add new init steps there.
+- `main.py` → `lifespan.py`: builds the main graph (no checkpointer) into `app.state.graph`, then runs registered startup handlers (an APScheduler job that re-ingests guides + Nexon notices every `RAG_SYNC_INTERVAL_HOURS`, Langfuse observability). Handlers are flagged critical/non-critical in `_STARTUP_HANDLERS`; add new init steps there.
 - Layout: `api/routes` (HTTP) → `services/chat.py` (request → graph input, graph events → SSE) → `graph`.
 - **LangGraph flow** (`graph/builder/main_builder.py`): `route` (structured-output classification into `chat` / `knowledge` / `character` / `character_knowledge`, falls back to `chat` on error) → `knowledge` (RAG subgraph: `rewrite` → `retrieve`) and/or `character` (Nexon subgraph: `extract_character` → `fetch_character`); `character_knowledge` runs both in parallel → `generate` (the only node whose tokens reach the user).
   - Subgraphs have their own builder/nodes/state and an `output_schema` (`RagOutput`, `NexonOutput`). They are invoked *inside* wrapper node functions, not added as nodes directly. Under `astream_events`, a directly added subgraph ignores `output_schema`, and the parallel branch then fails with `InvalidUpdateError`.
@@ -75,15 +75,34 @@ Django owns all conversation state. Each AI request carries `message`, the recen
     - It fetches only `/character/basic` plus the endpoints for the chosen aspects (`graph/tools/character_context.py`, max 6). The results are turned into compact Korean markdown, not raw JSON.
     - Lookup failures become guidance text in `character_context` that the answer model relays to the user.
 - **SSE contract** (`services/chat.py` docstring): `status`, `route`, `token`, `sources`, `error` JSON events, terminated by `data: [DONE]`. The frontend currently consumes only `token` and `[DONE]`.
-- LLMs: nodes never import a provider directly. They use `llm/factory.py`: `get_utility_llm()` (route/rewrite/extract, temperature 0, `LLM_PROVIDER` = `gemini` | `deepseek`) and `get_answer_llm()` (`ANSWER_LLM_PROVIDER`, defaults to `LLM_PROVIDER`; also allows `local` = an OpenAI-compatible server such as vLLM serving `fine_tuned_model/merged_qwen`). Invalid values fail at startup (pydantic `Literal`). `llm/llm_loader.py` (in-process HF pipeline) is only used by `rag/evaluation/`.
+- LLMs: nodes never import a provider directly. They use `llm/factory.py`: `get_utility_llm()` (route/rewrite/extract, temperature 0, `LLM_PROVIDER` = `gemini` | `deepseek`) and `get_answer_llm()` (`ANSWER_LLM_PROVIDER`, defaults to `LLM_PROVIDER`; also allows `local` = an OpenAI-compatible server such as vLLM serving `fine_tuned_model/merged_qwen`). Invalid values fail at startup (pydantic `Literal`).
 - Prompts: all prompt text lives in `prompts/templates.py`, keyed by the `PromptTemplate` enum. The `"gemini"` key is the default text shared by API models; `"local"` is for the local model. Don't inline prompt strings in nodes.
-- RAG: `rag/` uses `langchain_postgres.PGVector` with `QwenEmbeddings` (Qwen3-Embedding-0.6B). `vectorstore.build_database()` ingests JSON files (`data/`, `rag_documents/`) plus Redis data. RAG eval lives in `rag/evaluation/`.
+- **RAG knowledge base** (`rag/`):
+  - **Sources** (`sources.py`):
+    - Curated guides in `knowledge/guides/*.md` with YAML front matter. Only `status: reviewed` guides are ingested unless `--include-drafts` or `RAG_INCLUDE_DRAFT_GUIDES` is set.
+    - Nexon notice/update/event/cashshop bodies via `NexonClient.get_json`. HTML is converted to text, and event periods go into the metadata.
+    - Optional local JSON in `data/rag_documents`. Character and ranking data are never ingested; character info is fetched live.
+  - **Chunking** (`documents.py`): split per `##` section. Each chunk is prefixed with `[title > section]` plus the aliases. Chunk IDs are `{doc_id}#{n}`, so re-ingesting overwrites.
+  - **Ingest** (`ingest.py`, `python -m ai_server.rag.ingest`):
+    - Compares `content_hash` per document, so only changed documents are re-embedded.
+    - Guides and JSON are pruned by doc_id prefix; notices are only added.
+    - Chunks without `doc_id` (the old format) are deleted on every run.
+  - **Index** (`index.py`): `ChunkIndex` with `PGVectorIndex` (PGVector tables plus raw SQL on `cmetadata`) and `InMemoryIndex` (tests, offline eval). `vectorstore.get_index()` is the process singleton. The embedding model loads lazily on first use.
+  - **Search** (`retriever.py`, `HybridRetriever`):
+    - Runs pgvector search and Kiwi-tokenized BM25 (`tokenizer.py`, with a game-term user dictionary), then fuses them with RRF.
+    - BM25 candidates must share at least one token with the query (small corpora give BM25 IDF ≤ 0).
+    - Time words ("이번", "진행 중") drop ended events and boost recent docs.
+    - If vector search fails, keyword results are still returned.
+  - **Context** (`rag_nodes.format_documents`): numbers sources per document, not per chunk.
+  - **Eval**: `python -m ai_server.rag.evaluation.retrieval_eval` (hit@k/MRR over `testset.json`; keyword-only with the in-memory index, `--index pg` for the real index).
+  - pgvector is required. The local Windows PostgreSQL that `.env` may point to has no `vector` extension; use the Docker `db` service.
 
 ### Frontend (`frontend/`)
 React 18 + Vite + react-router + styled-components/CSS. API calls go through `src/api/client.js` (axios), and pages use hooks in `src/hooks/`. The `@` alias maps to `src/`. The Vite `base` is `/` in dev and `/static/dist/` in build. The built output in `static/dist/` is committed, so rebuild after frontend changes that should ship.
 
 ### Tests
 `tests/` holds the Python tests, with shared fixtures (users, profiles, sync/async clients) in `tests/conftest.py`. The test settings strip `pgvector.django`, set `DJANGO_ALLOW_ASYNC_UNSAFE`, and use cache-backed sessions so async views work under SQLite. AI-server tests never call real APIs:
-- `tests/test_ai_chat_graph.py` monkeypatches the node helpers (`classify_route`, `rewrite_query`, `search_documents`, `extract_entities`, `get_answer_llm` → `FakeListChatModel`) and drives `/stream` through `httpx.ASGITransport`.
+- `tests/test_ai_chat_graph.py` monkeypatches the node helpers (`classify_route`, `rewrite_query`, `search_documents`, `extract_character_query`, `get_answer_llm` → `FakeListChatModel`) and drives `/stream` through `httpx.ASGITransport`.
 - `tests/test_chat_services.py` fakes `aiohttp.ClientSession` to test the Django relay.
 - `tests/test_nexon_client.py` does the same for `common.nexon`. Its fixture zeroes the retry delay and the rate-limiter interval.
+- `tests/test_rag_pipeline.py` covers ingestion and retrieval with `InMemoryIndex` and fake indexes. It also asserts a keyword-only quality floor (hit@5 ≥ 0.9) on the guides and testset. If you edit guides or the testset, keep that test passing.

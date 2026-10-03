@@ -7,6 +7,7 @@ LLM_PROVIDER / ANSWER_LLM_PROVIDER 설정에 따라 용도별 모델이 올바�
 """
 
 import pytest
+from langchain_core.messages import HumanMessage
 from langchain_deepseek import ChatDeepSeek
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
@@ -27,6 +28,12 @@ def _isolated_llm_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings.api, "deepseek_api_key", "test-deepseek-key")
     monkeypatch.setattr(settings.model, "provider", "gemini")
     monkeypatch.setattr(settings.model, "answer_provider", "gemini")
+    monkeypatch.setattr(settings.model, "gemini_model", "gemini-2.5-flash")
+    monkeypatch.setattr(settings.model, "deepseek_model", "deepseek-flash")
+    monkeypatch.setattr(settings.model, "deepseek_api_base", "https://api.deepseek.com")
+    monkeypatch.setattr(settings.model, "deepseek_thinking_enabled", False)
+    monkeypatch.setattr(settings.model, "local_llm_base_url", "")
+    monkeypatch.setattr(settings.model, "local_llm_model", "merged_qwen")
 
 
 def _use(monkeypatch: pytest.MonkeyPatch, provider: str, answer_provider: str) -> None:
@@ -34,7 +41,7 @@ def _use(monkeypatch: pytest.MonkeyPatch, provider: str, answer_provider: str) -
     monkeypatch.setattr(settings.model, "answer_provider", answer_provider)
 
 
-def test_gemini_is_default_for_both_roles() -> None:
+def test_gemini_can_be_selected_for_both_roles() -> None:
     utility = factory.get_utility_llm()
     answer = factory.get_answer_llm()
 
@@ -55,11 +62,70 @@ def test_deepseek_for_both_roles(monkeypatch: pytest.MonkeyPatch) -> None:
     assert isinstance(utility, ChatDeepSeek) and isinstance(answer, ChatDeepSeek)
     assert utility.temperature == factory.UTILITY_TEMPERATURE
     assert answer.temperature == factory.ANSWER_TEMPERATURE
-    assert answer.model_name == settings.model.deepseek_model
+    assert utility.model_name == answer.model_name == "deepseek-flash"
+    assert utility.api_base == answer.api_base == "https://api.deepseek.com"
+    assert utility.extra_body == answer.extra_body == {"thinking": {"type": "disabled"}}
+
+
+def test_deepseek_uses_openai_chat_completions_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    """모델명과 thinking 설정이 OpenAI 호환 Chat Completions 요청에 포함되어야 합니다."""
+    _use(monkeypatch, "deepseek", "deepseek")
+    monkeypatch.setattr(settings.model, "deepseek_api_base", "https://gateway.example.test/v1")
+
+    answer = factory.get_answer_llm()
+    payload = answer._get_request_payload([HumanMessage(content="안녕")])
+
+    assert answer.api_base == "https://gateway.example.test/v1"
+    assert str(answer.root_client.base_url) == "https://gateway.example.test/v1/"
+    assert answer.client is answer.root_client.chat.completions
+    assert payload["model"] == "deepseek-flash"
+    assert payload["messages"] == [{"role": "user", "content": "안녕"}]
+    assert payload["temperature"] == factory.ANSWER_TEMPERATURE
+    assert payload["extra_body"] == {"thinking": {"type": "disabled"}}
+
+
+def test_deepseek_utility_disables_thinking_when_answer_enables_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """답변에서 사고 모드를 켜도 분류·추출 호출은 계속 비사고 모드를 사용합니다."""
+    _use(monkeypatch, "deepseek", "deepseek")
+    monkeypatch.setattr(settings.model, "deepseek_thinking_enabled", True)
+
+    utility = factory.get_utility_llm()
+    answer = factory.get_answer_llm()
+    payload = answer._get_request_payload([HumanMessage(content="질문")])
+
+    assert utility.extra_body == {"thinking": {"type": "disabled"}}
+    assert utility.temperature == factory.UTILITY_TEMPERATURE
+    assert answer.extra_body == {"thinking": {"type": "enabled"}}
+    assert answer.temperature is None
+    assert payload["extra_body"] == {"thinking": {"type": "enabled"}}
+    assert "temperature" not in payload
+
+
+def test_deepseek_cache_separates_thinking_modes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """같은 역할은 인스턴스를 재사용하고 사고 모드가 바뀌면 별도 인스턴스를 사용합니다."""
+    _use(monkeypatch, "deepseek", "deepseek")
+    utility = factory.get_utility_llm()
+    answer_without_thinking = factory.get_answer_llm()
+
+    assert factory.get_utility_llm() is utility
+    assert factory.get_answer_llm() is answer_without_thinking
+    assert utility is not answer_without_thinking
+
+    monkeypatch.setattr(settings.model, "deepseek_thinking_enabled", True)
+    answer_with_thinking = factory.get_answer_llm()
+
+    assert answer_with_thinking is not answer_without_thinking
+    assert factory.get_answer_llm() is answer_with_thinking
+    assert factory.get_utility_llm() is utility
+
+    monkeypatch.setattr(settings.model, "deepseek_thinking_enabled", False)
+    assert factory.get_answer_llm() is answer_without_thinking
 
 
 def test_deepseek_structured_output_uses_function_calling(monkeypatch: pytest.MonkeyPatch) -> None:
-    """DeepSeek은 json_schema 응답 형식을 지원하지 않으므로 노드의 구조화 출력이 tool 호출로 바뀌어야 합니다."""
+    """분류 노드의 구조화 출력이 DeepSeek의 function calling으로 호출되는지 검증합니다."""
     _use(monkeypatch, "deepseek", "deepseek")
 
     structured = factory.get_utility_llm().with_structured_output(RouteDecision)
@@ -97,6 +163,60 @@ def test_local_answer_model_requires_base_url(monkeypatch: pytest.MonkeyPatch) -
     assert isinstance(answer, ChatOpenAI)
     assert answer.openai_api_base == "http://localhost:8002/v1"
     assert answer.extra_body == {"chat_template_kwargs": {"enable_thinking": False}}
+
+
+def test_deepseek_flash_is_default_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
+    """LLM 환경변수가 없으면 DeepSeek Flash를 비사고 모드로 사용합니다."""
+    for name in (
+        "LLM_PROVIDER", "ANSWER_LLM_PROVIDER", "DEEPSEEK_MODEL",
+        "DEEPSEEK_API_BASE", "DEEPSEEK_THINKING_ENABLED",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    model_settings = ModelSettings()
+
+    assert model_settings.provider == "deepseek"
+    assert model_settings.answer_provider == "deepseek"
+    assert model_settings.deepseek_model == "deepseek-flash"
+    assert model_settings.deepseek_api_base == "https://api.deepseek.com"
+    assert model_settings.deepseek_thinking_enabled is False
+
+
+def test_deepseek_settings_honor_environment_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "DeepSeek")
+    monkeypatch.setenv("ANSWER_LLM_PROVIDER", "Gemini")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "custom-deepseek-model")
+    monkeypatch.setenv("DEEPSEEK_API_BASE", " https://gateway.example.test/v1 ")
+    monkeypatch.setenv("DEEPSEEK_THINKING_ENABLED", "true")
+
+    model_settings = ModelSettings()
+
+    assert model_settings.provider == "deepseek"
+    assert model_settings.answer_provider == "gemini"
+    assert model_settings.deepseek_model == "custom-deepseek-model"
+    assert model_settings.deepseek_api_base == "https://gateway.example.test/v1"
+    assert model_settings.deepseek_thinking_enabled is True
+
+
+@pytest.mark.parametrize("base_url", ["", "   "])
+def test_empty_deepseek_api_base_uses_default(
+    monkeypatch: pytest.MonkeyPatch, base_url: str
+) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_BASE", base_url)
+
+    assert ModelSettings().deepseek_api_base == "https://api.deepseek.com"
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [("True", True), ("1", True), ("yes", True), ("False", False), ("0", False)],
+)
+def test_deepseek_thinking_environment_flag(
+    monkeypatch: pytest.MonkeyPatch, value: str, expected: bool
+) -> None:
+    monkeypatch.setenv("DEEPSEEK_THINKING_ENABLED", value)
+
+    assert ModelSettings().deepseek_thinking_enabled is expected
 
 
 def test_answer_provider_defaults_to_llm_provider(monkeypatch: pytest.MonkeyPatch) -> None:

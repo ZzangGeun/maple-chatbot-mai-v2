@@ -13,24 +13,26 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 from fastapi import FastAPI
-from langchain_core.documents import Document
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 
 from ai_server.api.router import api_router
 from ai_server.graph.builder.main_builder import build_main_graph
 from ai_server.graph.nodes import generate_nodes, nexon_nodes, rag_nodes, route_nodes
+from ai_server.rag.documents import Chunk
 from ai_server.schemas.chat import QueryRequest
 from ai_server.services import chat as chat_service
 from common.nexon import CharacterFetchResult
 
 ANSWER = "반갑담! 답변이담."
 
-KNOWLEDGE_DOC = Document(
-    page_content="썬데이 메이플 이벤트 내용",
+KNOWLEDGE_DOC = Chunk(
+    chunk_id="notice:event:1#0",
+    text="썬데이 메이플 이벤트 내용",
     metadata={
+        "doc_id": "notice:event:1",
         "title": "썬데이 메이플",
-        "category": "notice_event",
+        "category": "event",
         "url": "https://maplestory.nexon.com/News/Event/1",
         "date": "2026-10-04",
     },
@@ -296,16 +298,3 @@ def test_build_graph_input_without_history(monkeypatch: pytest.MonkeyPatch) -> N
 
     assert [m.content for m in graph_input["messages"]] == ["현재 질문"]
 
-
-def test_format_documents_keeps_context_within_budget(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(rag_nodes, "MAX_CONTEXT_CHARS", 300)
-    docs = [
-        Document(page_content="가" * 200, metadata={"title": f"문서{i}", "url": f"u{i}"})
-        for i in range(1, 4)
-    ]
-
-    context, sources = rag_nodes.format_documents(docs)
-
-    assert len(context) <= 300
-    assert [s["title"] for s in sources] == ["문서1"]
-    assert context.startswith("[1] 문서1")

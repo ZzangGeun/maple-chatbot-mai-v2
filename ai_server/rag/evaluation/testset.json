@@ -1,14 +1,60 @@
 [
-  {
-    "question": "메이플스토리의 대표적인 버섯 몬스터 이름은?",
-    "ground_truth": "주황버섯"
-  },
-  {
-    "question": "빅토리아 아일랜드에 있는 마을 중 하나를 말해줘",
-    "ground_truth": "헤네시스, 페리온, 엘리니아, 커닝시티, 리스항구 중 하나"
-  },
-  {
-    "question": "초보자가 전직할 수 있는 직업군은?",
-    "ground_truth": "전사, 마법사, 궁수, 도적, 해적"
-  }
+  {"question": "스타포스 강화가 뭐야?", "expected_doc_ids": ["guide:starforce"]},
+  {"question": "스포 할 때 파괴방지 해야 돼?", "expected_doc_ids": ["guide:starforce"]},
+  {"question": "스타캐치 하면 뭐가 좋아?", "expected_doc_ids": ["guide:starforce"]},
+  {"question": "장비 강화하다 터지면 어떻게 돼?", "expected_doc_ids": ["guide:starforce"]},
+  {"question": "샤이닝 스타포스 이벤트 때 강화하는 게 이득이야?", "expected_doc_ids": ["guide:starforce"]},
+  {"question": "장비마다 별 몇 개까지 올릴 수 있어?", "expected_doc_ids": ["guide:starforce"]},
+  {"question": "스타포스 수치는 어디서 확인해?", "expected_doc_ids": ["guide:starforce"]},
+
+  {"question": "잠재능력 등급 순서 알려줘", "expected_doc_ids": ["guide:potential"]},
+  {"question": "윗잠이랑 에디 차이가 뭐야?", "expected_doc_ids": ["guide:potential"]},
+  {"question": "큐브 돌리면 등업 확률이 얼마야?", "expected_doc_ids": ["guide:potential"]},
+  {"question": "무기 잠재는 어떤 옵션을 띄워야 해?", "expected_doc_ids": ["guide:potential"]},
+  {"question": "모자 쿨감 옵션 붙어?", "expected_doc_ids": ["guide:potential"]},
+  {"question": "장갑에 크뎀 잠재 붙일 수 있어?", "expected_doc_ids": ["guide:potential"]},
+  {"question": "에디셔널 잠재능력에서 중요한 옵션은?", "expected_doc_ids": ["guide:potential"]},
+
+  {"question": "추옵이 뭐야?", "expected_doc_ids": ["guide:additional-options"]},
+  {"question": "환생의 불꽃으로 뭘 바꿀 수 있어?", "expected_doc_ids": ["guide:additional-options"]},
+  {"question": "무기 1추 2추가 무슨 뜻이야?", "expected_doc_ids": ["guide:additional-options"]},
+  {"question": "강환불이랑 영환불 차이", "expected_doc_ids": ["guide:additional-options"]},
+  {"question": "방어구 추가옵션은 어떻게 비교해?", "expected_doc_ids": ["guide:additional-options"]},
+  {"question": "환산 주스탯이 뭐야", "expected_doc_ids": ["guide:additional-options"]},
+
+  {"question": "아케인심볼 최대 레벨이 몇이야?", "expected_doc_ids": ["guide:symbols"]},
+  {"question": "어센틱심볼 종류 알려줘", "expected_doc_ids": ["guide:symbols"]},
+  {"question": "아케인포스 부족하면 어떻게 돼?", "expected_doc_ids": ["guide:symbols"]},
+  {"question": "심볼 레벨업은 어떻게 해?", "expected_doc_ids": ["guide:symbols"]},
+  {"question": "어센틱포스 11레벨이면 얼마야?", "expected_doc_ids": ["guide:symbols"]},
+  {"question": "세르니움 심볼은 어디 심볼이야?", "expected_doc_ids": ["guide:symbols"]},
+  {"question": "모라스 에스페라 심볼 일퀘", "expected_doc_ids": ["guide:symbols"]},
+
+  {"question": "6차 전직하면 뭐가 생겨?", "expected_doc_ids": ["guide:hexa-matrix"]},
+  {"question": "헥사 코어 종류 알려줘", "expected_doc_ids": ["guide:hexa-matrix"]},
+  {"question": "솔 에르다 조각은 어디서 얻어?", "expected_doc_ids": ["guide:hexa-matrix"]},
+  {"question": "마스터리 코어가 뭐야?", "expected_doc_ids": ["guide:hexa-matrix"]},
+  {"question": "헥사 스탯은 어떻게 구성돼?", "expected_doc_ids": ["guide:hexa-matrix"]},
+  {"question": "6차 코어 뭐부터 올려야 해?", "expected_doc_ids": ["guide:hexa-matrix"]},
+  {"question": "공용 코어 솔 야누스", "expected_doc_ids": ["guide:hexa-matrix"]},
+
+  {"question": "유니온 레벨은 어떻게 올려?", "expected_doc_ids": ["guide:union"]},
+  {"question": "유니온 등급 순서", "expected_doc_ids": ["guide:union"]},
+  {"question": "공격대원 효과랑 점령 효과 차이", "expected_doc_ids": ["guide:union"]},
+  {"question": "유니온 아티팩트가 뭐야?", "expected_doc_ids": ["guide:union"]},
+  {"question": "같은 월드 캐릭터 키우면 뭐가 좋아?", "expected_doc_ids": ["guide:union"]},
+
+  {"question": "보공 방무가 무슨 뜻이야?", "expected_doc_ids": ["guide:glossary"]},
+  {"question": "벞지가 뭐야", "expected_doc_ids": ["guide:glossary"]},
+  {"question": "하스우가 무슨 보스야?", "expected_doc_ids": ["guide:glossary"]},
+  {"question": "검마가 누구야?", "expected_doc_ids": ["guide:glossary"]},
+  {"question": "템셋이 무슨 말이야", "expected_doc_ids": ["guide:glossary"]},
+  {"question": "크확 크뎀 뜻", "expected_doc_ids": ["guide:glossary"]},
+
+  {"question": "스펙업 뭐부터 해야 돼?", "expected_doc_ids": ["guide:spec-up-basics"]},
+  {"question": "메소 적게 드는 성장부터 알려줘", "expected_doc_ids": ["guide:spec-up-basics"]},
+  {"question": "링크 스킬이랑 유니온 먼저 챙겨야 해?", "expected_doc_ids": ["guide:spec-up-basics", "guide:union"]},
+  {"question": "내 스펙 진단할 때 뭘 봐야 해?", "expected_doc_ids": ["guide:spec-up-basics"]},
+  {"question": "보스 컷이 얼마야?", "expected_doc_ids": ["guide:spec-up-basics"]},
+  {"question": "하이퍼 스탯 어빌리티 프리셋 나눠야 돼?", "expected_doc_ids": ["guide:spec-up-basics"]}
 ]

@@ -8,7 +8,7 @@ shutdown 시에는 모든 인프라를 순서대로 정리하며, 개별 실패�
 AI 서버는 대화 기록을 저장하지 않으므로(stateless) 체크포인터 없이 그래프를 빌드합니다.
 
 Startup 핸들러:
-  - Scheduler     : 캐릭터 데이터 배치 임베딩 스케줄러를 가동합니다. (non-critical)
+  - Scheduler     : 공략 문서·넥슨 공지 지식 베이스 정기 적재를 가동합니다. (non-critical)
   - Observability : Langfuse 모니터링을 시작합니다. (non-critical)
 
 Shutdown 핸들러:
@@ -44,21 +44,28 @@ _scheduler = None
 
 
 def _scheduler_startup() -> None:
-    """캐릭터 데이터 배치 임베딩 스케줄러를 가동합니다."""
+    """공략 문서·공지 정기 적재 스케줄러를 가동합니다. (RAG_SYNC_INTERVAL_HOURS, 0이면 사용 안 함)"""
     global _scheduler
 
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-    from ai_server.rag.character_batch import run_character_embedding_batch
+    from ai_server.config import settings
+    from ai_server.rag.ingest import run_scheduled_ingestion
+
+    hours = settings.rag.sync_interval_hours
+    if hours <= 0:
+        logger.info("지식 베이스 정기 적재가 꺼져 있습니다. (RAG_SYNC_INTERVAL_HOURS=0)")
+        return
 
     _scheduler = AsyncIOScheduler(timezone="Asia/Seoul")
     _scheduler.add_job(
-        run_character_embedding_batch,
-        trigger="cron",
-        hour=4,
-        minute=0,
-        id="character_embedding_job",
-        name="매일 새벽 4시 캐릭터 데이터 pgvector 임베딩 적재",
+        run_scheduled_ingestion,
+        trigger="interval",
+        hours=hours,
+        id="knowledge_sync_job",
+        name=f"{hours}시간마다 공략 문서·넥슨 공지 지식 베이스 적재",
+        max_instances=1,
+        coalesce=True,
     )
     _scheduler.start()
 
