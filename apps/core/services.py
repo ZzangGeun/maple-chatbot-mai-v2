@@ -1,39 +1,97 @@
 import json
 import logging
+import time
+from threading import Lock
 
 import redis
 from asgiref.sync import async_to_sync
 from django.conf import settings
+from django.core.cache.backends.locmem import LocMemCache
+from redis.backoff import NoBackoff
+from redis.retry import Retry
 
 from common.utils.api_client import get_api_data
 
 logger = logging.getLogger(__name__)
 
-# Redis 연결 설정
+# Redis 장애가 홈페이지 응답을 오래 지연시키지 않도록 한 번만 연결합니다.
 REDIS_URL = getattr(settings, "REDIS_URL", "redis://127.0.0.1:6379/0")
-redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+redis_client = redis.from_url(
+    REDIS_URL,
+    decode_responses=True,
+    socket_connect_timeout=1,
+    socket_timeout=1,
+    retry=Retry(NoBackoff(), 0),
+)
 
-CACHE_DURATION = 3600  # 캐시 유효 기간 설정 (초 단위: 1시간)
+CACHE_DURATION = 3600  # 캐시 유효 기간: 1시간
+REDIS_RETRY_AFTER_SECONDS = 60
+_redis_retry_at = 0.0
+_redis_state_lock = Lock()
+# Redis를 사용할 수 없어도 같은 프로세스의 반복 요청은 API를 다시 호출하지 않습니다.
+_fallback_cache = LocMemCache("mai-core-home-fallback", {})
+
+
+def _redis_available() -> bool:
+    with _redis_state_lock:
+        return time.monotonic() >= _redis_retry_at
+
+
+def _pause_redis(error: redis.RedisError) -> None:
+    """연결 실패 후 잠시 재시도를 멈추고 같은 경고의 반복을 제한합니다."""
+    global _redis_retry_at
+    with _redis_state_lock:
+        now = time.monotonic()
+        if now < _redis_retry_at:
+            return
+        _redis_retry_at = now + REDIS_RETRY_AFTER_SECONDS
+    logger.warning(
+        "Redis 홈 캐시를 사용할 수 없어 %d초 동안 메모리 캐시를 사용합니다. "
+        "Redis 실행 상태와 REDIS_URL을 확인하세요: %s",
+        REDIS_RETRY_AFTER_SECONDS,
+        error,
+    )
 
 
 def save_data_to_redis(key: str, data: dict | list) -> None:
-    """Redis에 데이터를 캐싱하는 제네릭 함수"""
+    """홈 데이터를 캐시합니다. Redis 장애 시에는 메모리 캐시만 사용합니다."""
     try:
-        redis_client.setex(key, CACHE_DURATION, json.dumps(data, ensure_ascii=False))
-        logger.info(f"데이터가 Redis에 캐시되었습니다: {key}")
-    except Exception as e:
-        logger.error(f"Redis 데이터 저장 중 오류 발생 ({key}): {e}")
+        payload = json.dumps(data, ensure_ascii=False)
+    except (TypeError, ValueError) as error:
+        logger.warning("홈 데이터를 JSON 캐시에 저장할 수 없습니다 (%s): %s", key, error)
+        return
+
+    _fallback_cache.set(key, data, timeout=CACHE_DURATION)
+    if not _redis_available():
+        return
+    try:
+        redis_client.setex(key, CACHE_DURATION, payload)
+    except redis.RedisError as error:
+        _pause_redis(error)
+    else:
+        logger.info("데이터가 Redis에 캐시되었습니다: %s", key)
 
 
 def load_data_from_redis(key: str) -> dict | list | None:
-    """Redis에서 캐싱된 데이터를 불러오는 제네릭 함수"""
+    """Redis 캐시를 우선 조회하고, 연결 실패 시 메모리 캐시를 반환합니다."""
+    if not _redis_available():
+        return _fallback_cache.get(key)
     try:
-        data = redis_client.get(key)
-        if data:
-            return json.loads(data)
-    except Exception as e:
-        logger.error(f"Redis 데이터 로드 중 오류 발생 ({key}): {e}")
-    return None
+        raw = redis_client.get(key)
+    except redis.RedisError as error:
+        _pause_redis(error)
+        return _fallback_cache.get(key)
+
+    if raw:
+        try:
+            data = json.loads(raw)
+        except (json.JSONDecodeError, TypeError) as error:
+            logger.warning("Redis 홈 캐시의 JSON 형식이 올바르지 않습니다 (%s): %s", key, error)
+        else:
+            if isinstance(data, (dict, list)):
+                return data
+            logger.warning("Redis 홈 캐시가 dict 또는 list 형식이 아닙니다 (%s)", key)
+    return _fallback_cache.get(key)
 
 
 # 도메인별 Redis 캐시 접근 래핑 함수 (views.py에서 import하기 위한 별칭)

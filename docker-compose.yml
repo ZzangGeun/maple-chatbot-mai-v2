@@ -19,6 +19,12 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
     restart: always
 
 
@@ -44,8 +50,10 @@ services:
       sleep 1;
       done && python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_started
+      redis:
+        condition: service_healthy
     restart: always
 
   fastapi:
@@ -71,8 +79,10 @@ services:
       sleep 1;
       done && python -m ai_server.main"
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_started
+      redis:
+        condition: service_healthy
     restart: always
 
 volumes:
