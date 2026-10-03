@@ -60,6 +60,8 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379/0
       - MODEL_PATH=/app/fine_tuned_model/merged_qwen
+      - DATABASE_HOST=db
+      - DB_CONNECTION=
     volumes:
       - .:/app
       - /app/.venv  

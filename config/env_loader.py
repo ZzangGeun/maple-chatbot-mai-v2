@@ -1,5 +1,7 @@
 from pathlib import Path
+
 from dotenv import load_dotenv
+
 
 def load_project_env():
     """env/.env.local 파일을 우선적으로 로드하고, 없을 경우 루트 .env를 로드합니다."""
@@ -8,8 +10,8 @@ def load_project_env():
     env_root = base_dir / ".env"
 
     if env_local.exists():
-        load_dotenv(dotenv_path=env_local, override=True)
+        load_dotenv(dotenv_path=env_local, override=False)
     elif env_root.exists():
-        load_dotenv(dotenv_path=env_root, override=True)
+        load_dotenv(dotenv_path=env_root, override=False)
     else:
         load_dotenv()
