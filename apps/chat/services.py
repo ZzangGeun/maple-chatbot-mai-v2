@@ -34,6 +34,12 @@ HISTORY_MAX_MESSAGES = 10
 FAILURE_NOTICE = "답변을 만드는 중 문제가 생겼어요. 잠시 후 다시 시도해 주세요."
 
 
+def _ai_headers() -> dict[str, str]:
+    """AI 서버 내부 호출 토큰 헤더. 토큰을 설정하지 않았으면 빈 헤더를 보냅니다."""
+    token = getattr(settings, "AI_SERVER_TOKEN", "")
+    return {"X-Internal-Token": token} if token else {}
+
+
 def get_ai_urls() -> tuple[str, str]:
     """AI 서버 generate/stream 엔드포인트 URL을 반환합니다."""
     ai_base = getattr(settings, "AI_SERVER_BASE_URL", "http://127.0.0.1:8001").rstrip(
@@ -109,7 +115,7 @@ async def send_message_async(
     try:
         timeout = aiohttp.ClientTimeout(total=AI_REQUEST_TIMEOUT_SEC)
         async with aiohttp.ClientSession(timeout=timeout) as client:
-            async with client.post(generate_url, json=payload) as response:
+            async with client.post(generate_url, json=payload, headers=_ai_headers()) as response:
                 if response.status == 200:
                     ai_data = await response.json()
                 else:
@@ -261,7 +267,7 @@ async def stream_message_generator(session: ChatSession, content: str, user: Any
         try:
             timeout = aiohttp.ClientTimeout(total=AI_STREAM_TIMEOUT_SEC)
             async with aiohttp.ClientSession(timeout=timeout) as client:
-                async with client.post(stream_url, json=payload) as r:
+                async with client.post(stream_url, json=payload, headers=_ai_headers()) as r:
                     if r.status != 200:
                         logger.error(f"AI 서버 스트리밍 에러: {r.status}")
                         error_message = "AI 서버 오류가 발생했습니다."

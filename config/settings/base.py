@@ -136,6 +136,20 @@ REDIS_URL = config("REDIS_URL", default="redis://127.0.0.1:6379/0")
 # 넥슨 API 응답을 Redis에 캐싱해 AI 서버와 공유합니다. (common.nexon.cache)
 NEXON_CACHE_ENABLED = config("NEXON_CACHE_ENABLED", default=True, cast=bool)
 
+# AI 서버 내부 호출 토큰. AI 서버의 AI_SERVER_TOKEN과 같은 값이어야 합니다. (비우면 토큰 없이 호출)
+AI_SERVER_TOKEN = config("AI_SERVER_TOKEN", default="")
+
+# ─────────────────────────────────────────────
+# 채팅 남용 방지
+# ─────────────────────────────────────────────
+# 메시지 전송 횟수 제한 ("1분 20회, 하루 300회" 형식: 20/m,300/d). 비로그인은 IP 기준으로 더 낮게 둡니다.
+CHAT_RATE_LIMIT_USER = config("CHAT_RATE_LIMIT_USER", default="20/m,300/d")
+CHAT_RATE_LIMIT_ANON = config("CHAT_RATE_LIMIT_ANON", default="5/m,30/d")
+# 메시지 하나의 최대 글자 수
+CHAT_MESSAGE_MAX_CHARS = config("CHAT_MESSAGE_MAX_CHARS", default=2000, cast=int)
+# 리버스 프록시(Caddy/Nginx)가 넣은 X-Real-IP를 클라이언트 IP로 믿을지 (프록시 뒤에서만 True)
+TRUST_X_REAL_IP = config("TRUST_X_REAL_IP", default=False, cast=bool)
+
 # ─────────────────────────────────────────────
 # 광고 설정
 # ─────────────────────────────────────────────

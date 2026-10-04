@@ -5,15 +5,15 @@
 HTTP 인터페이스 처리와 라우팅만 담당합니다.
 """
 
-import json
 import logging
 
+from django.conf import settings
 from django.http import JsonResponse, StreamingHttpResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from apps.chat.models import ChatSession
 from apps.chat.services import send_message_async, stream_message_generator
+from common import ratelimit
 from common.utils.request_helpers import parse_json_body
 
 logger = logging.getLogger(__name__)
@@ -22,6 +22,53 @@ logger = logging.getLogger(__name__)
 def _extract_message_content(body: dict) -> str:
     """파싱된 요청 데이터에서 메시지 본문을 추출합니다."""
     return body.get("message_content", "").strip() or body.get("content", "").strip()
+
+
+def _error(status: int, error_code: str, message: str) -> JsonResponse:
+    return JsonResponse(
+        {"success": False, "error_code": error_code, "message": message}, status=status
+    )
+
+
+async def _owned_session(request, session_id: str) -> ChatSession:
+    """요청한 사람(로그인 사용자 또는 비로그인 브라우저)이 소유한 세션을 반환합니다."""
+    user = await request.auser()
+    return await ChatSession.objects.aget_owned_or_raise(
+        session_id, user, request.session.session_key
+    )
+
+
+async def _check_new_message(request, body: dict) -> tuple[str, JsonResponse | None]:
+    """새 메시지의 본문을 검사하고 전송 횟수 제한을 적용합니다.
+
+    Returns:
+        (메시지 본문, 거절할 때의 오류 응답 또는 None)
+    """
+    content = _extract_message_content(body)
+    if not content:
+        return content, _error(
+            400, "CONTENT_REQUIRED", "메시지 본문(message_content)이 준비되어야 합니다."
+        )
+
+    max_chars = settings.CHAT_MESSAGE_MAX_CHARS
+    if len(content) > max_chars:
+        return content, _error(
+            400, "MESSAGE_TOO_LONG", f"메시지는 {max_chars}자 이하로 보내 주세요."
+        )
+
+    # 로그인 사용자는 계정 기준, 비로그인 사용자는 IP 기준으로 더 낮은 한도를 적용합니다.
+    user = await request.auser()
+    if user.is_authenticated:
+        scope, ident, spec = "chat:user", str(user.pk), settings.CHAT_RATE_LIMIT_USER
+    else:
+        scope, ident, spec = "chat:anon", ratelimit.client_ip(request), settings.CHAT_RATE_LIMIT_ANON
+    if not await ratelimit.ahit(scope, ident, ratelimit.parse_rate_limits(spec)):
+        logger.warning(f"채팅 요청 한도 초과: {scope}:{ident}")
+        return content, _error(
+            429, "RATE_LIMITED", "질문이 너무 많아요. 잠시 후 다시 시도해 주세요."
+        )
+
+    return content, None
 
 
 # ---------------------------------------------------------------------------
@@ -77,14 +124,19 @@ async def create_session(request) -> JsonResponse:
     POST /api/v1/chat/rooms
     """
     user = await request.auser()
-    user_profile = user if user.is_authenticated else None
 
     body, parse_error = parse_json_body(request)
     room_name = "새로운 대화"
     if parse_error is None:
         room_name = str(body.get("room_name", room_name)).strip() or room_name
 
-    session = await ChatSession.objects.acreate(user=user_profile)
+    if user.is_authenticated:
+        session = await ChatSession.objects.acreate(user=user)
+    else:
+        # 비로그인 세션은 이 브라우저의 Django 세션 키로 주인을 구분합니다.
+        if not request.session.session_key:
+            await request.session.acreate()
+        session = await ChatSession.objects.acreate(owner_key=request.session.session_key)
     logger.info(f"새로운 세션 생성: {session.session_id}")
 
     return JsonResponse(
@@ -105,7 +157,7 @@ async def get_messages(request, session_id: str) -> JsonResponse:
 
     GET /api/v1/chat/rooms/{room_id}/messages
     """
-    session = await ChatSession.objects.aget_by_uuid_or_raise(session_id)
+    session = await _owned_session(request, session_id)
     # select_related를 통해 metadata 조인을 미리 수행합니다.
     messages = [
         msg
@@ -146,29 +198,14 @@ async def send_message(request, session_id: str) -> JsonResponse:
 
     POST /api/v1/chat/rooms/{room_id}/messages
     """
-    session = await ChatSession.objects.aget_by_uuid_or_raise(session_id)
+    session = await _owned_session(request, session_id)
 
     body, parse_error = parse_json_body(request)
     if parse_error:
-        return JsonResponse(
-            {
-                "success": False,
-                "error_code": "INVALID_FORMAT",
-                "message": "유효하지 않은 요청 형식입니다.",
-            },
-            status=400,
-        )
-    content = _extract_message_content(body)
-
-    if not content:
-        return JsonResponse(
-            {
-                "success": False,
-                "error_code": "CONTENT_REQUIRED",
-                "message": "메시지 본문(message_content)이 준비되어야 합니다.",
-            },
-            status=400,
-        )
+        return _error(400, "INVALID_FORMAT", "유효하지 않은 요청 형식입니다.")
+    content, rejection = await _check_new_message(request, body)
+    if rejection:
+        return rejection
 
     user = await request.auser()
     user_msg, assistant_msg, _ = await send_message_async(session, content, user)
@@ -198,7 +235,7 @@ async def delete_session(request, session_id: str) -> JsonResponse:
 
     DELETE /api/v1/chat/rooms/{room_id}
     """
-    session = await ChatSession.objects.aget_by_uuid_or_raise(session_id)
+    session = await _owned_session(request, session_id)
     await session.adelete()
     return JsonResponse(
         {"success": True, "message": "대화방이 삭제되었습니다."}, status=200
@@ -207,10 +244,10 @@ async def delete_session(request, session_id: str) -> JsonResponse:
 
 # ---------------------------------------------------------------------------
 # HTTP Method Dispatchers (설계서 API 규격 맵핑 목적)
+# 세션 쿠키로 인증하므로 CSRF 검사를 적용합니다. (프론트는 X-CSRFToken 헤더를 보냅니다)
 # ---------------------------------------------------------------------------
 
 
-@csrf_exempt
 async def rooms_dispatch(request) -> JsonResponse:
     """/api/v1/chat/rooms 경로의 GET/POST 분기 처리"""
     if request.method == "GET":
@@ -220,7 +257,6 @@ async def rooms_dispatch(request) -> JsonResponse:
     return JsonResponse({"detail": "Method not allowed"}, status=405)
 
 
-@csrf_exempt
 async def messages_dispatch(request, session_id: str) -> JsonResponse:
     """/api/v1/chat/rooms/{session_id}/messages 경로의 GET/POST 분기 처리"""
     if request.method == "GET":
@@ -230,7 +266,6 @@ async def messages_dispatch(request, session_id: str) -> JsonResponse:
     return JsonResponse({"detail": "Method not allowed"}, status=405)
 
 
-@csrf_exempt
 async def room_detail_dispatch(request, session_id: str) -> JsonResponse:
     """/api/v1/chat/rooms/{session_id} 경로의 DELETE 분기 처리"""
     if request.method == "DELETE":
@@ -239,24 +274,20 @@ async def room_detail_dispatch(request, session_id: str) -> JsonResponse:
 
 
 # (참고) SSE 스트리밍 엔드포인트
-@csrf_exempt
 @require_http_methods(["POST"])
 async def stream_message(request, session_id: str) -> StreamingHttpResponse:
     """세션에 메시지를 전송하고 AI 서버로부터 스트리밍 응답 수신 (SSE).
 
-    POST /api/v1/chat/sessions/<session_id>/stream/
+    POST /api/v1/chat/rooms/<session_id>/stream/
     """
-    session = await ChatSession.objects.aget_by_uuid_or_raise(session_id)
+    session = await _owned_session(request, session_id)
 
     body, parse_error = parse_json_body(request)
     if parse_error:
-        return JsonResponse({"error": "유효하지 않은 요청 형식입니다."}, status=400)
-    content = _extract_message_content(body)
-
-    if not content:
-        return JsonResponse(
-            {"error": "메시지 본문(message_content)이 준비되어야 합니다."}, status=400
-        )
+        return _error(400, "INVALID_FORMAT", "유효하지 않은 요청 형식입니다.")
+    content, rejection = await _check_new_message(request, body)
+    if rejection:
+        return rejection
 
     user = await request.auser()
     stream_generator = stream_message_generator(session, content, user)

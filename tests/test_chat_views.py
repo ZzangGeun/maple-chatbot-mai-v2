@@ -128,6 +128,7 @@ class TestMessagesDispatch:
         )
 
         client = AsyncClient()
+        await client.alogin(username="msg_view_user", password="password123")
         response = await client.get(self.messages_url)
         assert response.status_code == 200
         data = response.json()
@@ -140,6 +141,7 @@ class TestMessagesDispatch:
     async def test_get_messages_empty(self) -> None:
         """메시지가 없는 세션은 빈 목록을 반환해야 합니다."""
         client = AsyncClient()
+        await client.alogin(username="msg_view_user", password="password123")
         response = await client.get(self.messages_url)
         assert response.status_code == 200
         data = response.json()
@@ -149,6 +151,7 @@ class TestMessagesDispatch:
     async def test_get_messages_invalid_session_id(self) -> None:
         """잘못된 세션 ID로 조회 시 에러를 반환해야 합니다."""
         client = AsyncClient()
+        await client.alogin(username="msg_view_user", password="password123")
         response = await client.get(
             "/api/v1/chat/rooms/not-a-uuid/messages"
         )
@@ -160,6 +163,7 @@ class TestMessagesDispatch:
         """존재하지 않는 세션 ID로 조회 시 404를 반환해야 합니다."""
         fake_uuid = str(uuid.uuid4())
         client = AsyncClient()
+        await client.alogin(username="msg_view_user", password="password123")
         response = await client.get(
             f"/api/v1/chat/rooms/{fake_uuid}/messages"
         )
@@ -177,6 +181,7 @@ class TestMessagesDispatch:
         mock_send.return_value = (mock_msg, mock_msg, {})
 
         client = AsyncClient()
+        await client.alogin(username="msg_view_user", password="password123")
         response = await client.post(
             self.messages_url,
             data=json.dumps({"message_content": "메이플 보스 추천해줘"}),
@@ -191,6 +196,7 @@ class TestMessagesDispatch:
     async def test_send_message_invalid_json(self) -> None:
         """잘못된 JSON 요청은 AI 서비스를 호출하지 않고 400을 반환해야 합니다."""
         client = AsyncClient()
+        await client.alogin(username="msg_view_user", password="password123")
         response = await client.post(
             self.messages_url,
             data="not-json",
@@ -202,6 +208,7 @@ class TestMessagesDispatch:
     async def test_send_message_empty_content(self) -> None:
         """빈 메시지 전송 시 400을 반환해야 합니다."""
         client = AsyncClient()
+        await client.alogin(username="msg_view_user", password="password123")
         response = await client.post(
             self.messages_url,
             data=json.dumps({"message_content": ""}),
@@ -229,6 +236,7 @@ class TestRoomDetailDispatch:
     async def test_delete_session(self) -> None:
         """DELETE 요청으로 세션을 삭제해야 합니다."""
         client = AsyncClient()
+        await client.alogin(username="del_user", password="password123")
         response = await client.delete(self.detail_url)
         assert response.status_code == 200
         data = response.json()
@@ -245,5 +253,6 @@ class TestRoomDetailDispatch:
         """존재하지 않는 세션 삭제 시 404를 반환해야 합니다."""
         fake_uuid = str(uuid.uuid4())
         client = AsyncClient()
+        await client.alogin(username="del_user", password="password123")
         response = await client.delete(f"/api/v1/chat/rooms/{fake_uuid}")
         assert response.status_code == 404

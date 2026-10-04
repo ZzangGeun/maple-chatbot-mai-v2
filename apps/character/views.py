@@ -8,7 +8,7 @@
 import logging
 
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
+
 from django.views.decorators.http import require_http_methods
 
 from apps.character.nexon import get_character_data
@@ -22,7 +22,6 @@ from common.utils.request_helpers import parse_json_body
 logger = logging.getLogger(__name__)
 
 
-@csrf_exempt
 @require_http_methods(["GET"])
 async def character_search(request) -> JsonResponse:
     """
@@ -72,7 +71,6 @@ async def character_search(request) -> JsonResponse:
         )
 
 
-@csrf_exempt
 @require_http_methods(["POST"])
 async def character_link(request) -> JsonResponse:
     """메이플스토리 캐릭터 연동 신청 API.
@@ -124,7 +122,6 @@ async def character_link(request) -> JsonResponse:
     )
 
 
-@csrf_exempt
 @require_http_methods(["POST"])
 async def character_verify(request) -> JsonResponse:
     """메이플스토리 캐릭터 인증 완료 API.

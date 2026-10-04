@@ -69,6 +69,28 @@ class ChatSessionQuerySet(models.QuerySet):
             raise SessionNotFound(session_id)
         return session
 
+    async def aget_owned_or_raise(
+        self, session_id: str, user, owner_key: str | None
+    ) -> "ChatSession":
+        """요청한 사람이 소유한 세션만 반환합니다.
+
+        - 로그인 사용자의 세션: 같은 사용자만 접근할 수 있습니다.
+        - 비로그인 세션: 세션을 만든 브라우저(Django 세션 키)만 접근할 수 있습니다.
+        다른 사람의 세션은 존재 여부를 드러내지 않도록 없는 세션과 같은 오류를 냅니다.
+
+        Raises:
+            InvalidSessionId: session_id가 올바른 UUID 포맷이 아닐 때.
+            SessionNotFound: 세션이 없거나 요청한 사람의 세션이 아닐 때.
+        """
+        session = await self.aget_by_uuid_or_raise(session_id)
+        if session.user_id is not None:
+            owned = user is not None and user.is_authenticated and session.user_id == user.pk
+        else:
+            owned = bool(owner_key) and session.owner_key == owner_key
+        if not owned:
+            raise SessionNotFound(session_id)
+        return session
+
 
 class ChatSession(models.Model):
     """하나의 대화방"""
@@ -87,6 +109,15 @@ class ChatSession(models.Model):
         blank=True,
         db_index=True,
         verbose_name="사용자"
+    )
+
+    # 비로그인 세션의 주인(브라우저)을 구분하는 Django 세션 키. 로그인 사용자의 세션은 비워 둡니다.
+    owner_key = models.CharField(
+        max_length=40,
+        blank=True,
+        default="",
+        db_index=True,
+        verbose_name="비로그인 소유자 세션 키",
     )
 
     created_at = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name="생성 일시")

@@ -6,6 +6,7 @@ FastAPI 공통 의존성(Dependency) 모듈
 FastAPI의 Depends 패턴으로 분리하여 재사용성과 테스트 용이성을 높입니다.
 """
 
+import hmac
 import logging
 
 from fastapi import Header, HTTPException, Request
@@ -29,12 +30,30 @@ def get_graph(request: Request):
     return graph
 
 
-def require_admin_token(authorization: str | None = Header(default=None)) -> str:
-    """관리자용 엔드포인트의 Bearer 토큰 존재를 검증하고 토큰을 반환합니다."""
-    if not authorization or not authorization.startswith("Bearer "):
-        logger.warning("관리자 인증 토큰이 누락되었습니다.")
+def verify_internal_token(x_internal_token: str | None = Header(default=None)) -> None:
+    """Django가 보낸 내부 호출 토큰(X-Internal-Token)을 검증합니다.
+
+    AI_SERVER_TOKEN을 설정하지 않은 로컬 개발 환경에서는 검사하지 않습니다.
+    """
+    expected = settings.ai_server_token
+    if not expected:
+        return
+    if not x_internal_token or not hmac.compare_digest(x_internal_token, expected):
+        logger.warning("내부 호출 토큰이 없거나 일치하지 않습니다.")
         raise HTTPException(status_code=401, detail="인증이 필요합니다.")
-    return authorization.removeprefix("Bearer ").strip()
+
+
+def require_admin_token(authorization: str | None = Header(default=None)) -> str:
+    """관리자용 엔드포인트의 Bearer 토큰을 AI_ADMIN_TOKEN과 비교해 검증합니다.
+
+    AI_ADMIN_TOKEN을 설정하지 않으면 관리자 API를 아무도 쓸 수 없습니다.
+    """
+    token = (authorization or "").removeprefix("Bearer ").strip() if (authorization or "").startswith("Bearer ") else ""
+    expected = settings.admin_token
+    if not expected or not token or not hmac.compare_digest(token, expected):
+        logger.warning("관리자 인증 실패 (토큰 누락·불일치 또는 AI_ADMIN_TOKEN 미설정)")
+        raise HTTPException(status_code=401, detail="인증이 필요합니다.")
+    return token
 
 
 def get_character_name(authorization: str | None = Header(default=None)) -> str:

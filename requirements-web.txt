@@ -1,0 +1,19 @@
+# Django 웹 서버 전용 의존성 (Dockerfile.django)
+# AI 서버(ai_server/)는 requirements.txt 전체를 사용합니다. Django는 PyTorch·LangChain이 필요 없습니다.
+# 여기 패키지를 바꾸면 requirements.txt의 같은 패키지 버전도 함께 맞춰 주세요.
+
+Django==5.2.12
+django-cors-headers==4.9.0
+pgvector==0.3.6
+psycopg[binary]==3.3.3
+python-decouple==3.8
+python-dotenv==1.0.0
+pydantic==2.12.5
+
+aiohttp==3.13.5
+beautifulsoup4==4.14.3
+redis==7.4.0
+
+# 운영: ASGI 서버와 정적 파일 서빙
+uvicorn==0.24.0
+whitenoise==6.11.0

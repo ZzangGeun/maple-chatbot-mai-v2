@@ -23,4 +23,6 @@ app.include_router(api_router)
 if __name__ == "__main__":
     # 프로젝트 루트에서 실행해야 절대경로 import가 정상 동작합니다.
     # 실행 명령: python -m ai_server.main
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    # 워커는 1개로 고정합니다. 임베딩 모델·검색 인덱스·스케줄러를 프로세스마다 따로 띄우지 않기 위해서입니다.
+    # (uvicorn은 WEB_CONCURRENCY 환경 변수를 워커 수로 읽는데, 이 값은 Django 워커 수 용도입니다)
+    uvicorn.run(app, host="0.0.0.0", port=8001, workers=1)

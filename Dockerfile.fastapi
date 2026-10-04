@@ -17,8 +17,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # 종속성 파일 복사 및 설치
+# AI 서버는 GPU를 쓰지 않으므로(임베딩은 CPU, 답변 생성은 외부 LLM API) PyTorch를 CPU 전용 인덱스에서
+# 먼저 설치합니다. 이렇게 하면 requirements.txt 설치 때 수 GB의 CUDA 라이브러리를 받지 않습니다.
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu \
+        torch==2.11.0 torchvision==0.26.0 torchaudio==2.11.0 && \
     pip install --no-cache-dir -r requirements.txt
 
 # 소스코드 복사

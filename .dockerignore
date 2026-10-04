@@ -1,10 +1,26 @@
 .venv
 __pycache__
+*.pyc
+.pytest_cache
 .git
 .gitignore
 .vscode
+.claude
 docs/obsidian
+
+# 비밀값: 이미지에 넣지 않고 실행 시 env_file로 주입합니다.
+env
+.env
+.env.*
+!.env.example
+
+# 대용량·로컬 데이터
 data
+rag_documents
 fine_tuned_model
 offload_cache
-env
+media
+staticfiles
+
+# 프론트엔드 소스 의존성 (빌드 결과 static/dist만 필요)
+frontend/node_modules

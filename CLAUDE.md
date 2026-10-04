@@ -61,6 +61,15 @@ Django owns all conversation state. Each AI request carries `message`, the recen
   - `NexonCache` stores responses in Redis, shared by both servers (OCID 1 day, character data 15 min). It fails open when Redis is down. Django turns it off with `NEXON_CACHE_ENABLED=False` (test settings).
   - Django's `apps/character/nexon/character_service.py` builds the search-page response with `common.nexon.extractors.all_info_extract`. The frontend reads `basic_info`, `stat_info`, and `item_info.item_equipment`, so keep that shape.
 - Views/services are async and use `aiohttp` for outbound I/O; get the user with `await request.auser()` (not `request.user`) in async views. `apps/chat/services.py` proxies chat to the AI server, either awaiting `/generate` or relaying `/stream` SSE lines to the client (`StreamRelay` collects tokens/route/sources). It always ends the stream with `data: [DONE]` and saves the answer plus `MessageMetadata` (route, sources, latency). Empty answers are not saved. Because the current frontend ignores `error` events, failures are also sent as a `token` notice (`FAILURE_NOTICE`), which is not persisted.
+- **Security** (chat views + settings):
+  - Chat sessions are owner-checked via `ChatSession.objects.aget_owned_or_raise`. Users own their sessions. Anonymous sessions are tied to the Django session key (`owner_key`). Non-owners get 404.
+  - CSRF is enforced. No `csrf_exempt`; `/api/v1/auth/user/` and `serve_react` are decorated with `ensure_csrf_cookie`.
+  - New chat messages pass `_check_new_message`: a length cap (`CHAT_MESSAGE_MAX_CHARS`) and fixed-window rate limits (`common/ratelimit.py`, `CHAT_RATE_LIMIT_USER` / `CHAT_RATE_LIMIT_ANON`, counted in the Django cache, i.e. Redis in production). The client IP comes from `X-Real-IP` only when `TRUST_X_REAL_IP`.
+  - Django sends `X-Internal-Token` (`AI_SERVER_TOKEN`). The AI server checks it on all routes except `/health`, and only when it is set. Admin routes require `AI_ADMIN_TOKEN`.
+- **Production** (`docker-compose.prod.yml`, `deploy/`, `docs/infra/deployment.md`):
+  - Request path: Caddy (auto HTTPS, `flush_interval -1` for SSE) → Django under uvicorn with `config.settings.production` (WhiteNoise, Redis cache, secure cookies) → AI server. Only Caddy publishes ports.
+  - `Dockerfile.django` installs `requirements-web.txt` (no PyTorch) and runs `collectstatic` at build time. `Dockerfile.fastapi` installs CPU-only torch.
+  - Health endpoints: `/api/v1/core/health/` (Django, blocked at Caddy) and `/health` (AI server).
 - Shared cross-app code is in `common/`: custom exceptions (`common/exceptions/`) are converted to responses by `common.middleware.error_handler.ErrorHandlerMiddleware`; a standard response schema is in `common/schemas/response.py`.
 
 ### AI server (`ai_server/`)

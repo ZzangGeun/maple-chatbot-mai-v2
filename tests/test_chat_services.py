@@ -66,9 +66,10 @@ class _FakeClientSession:
     async def __aexit__(self, *exc: Any) -> bool:
         return False
 
-    def post(self, url: str, json: dict) -> _FakeResponseContext:
+    def post(self, url: str, json: dict, headers: dict | None = None) -> _FakeResponseContext:
         self._captured["url"] = url
         self._captured["json"] = json
+        self._captured["headers"] = headers or {}
         return _FakeResponseContext(self._response)
 
 
@@ -340,9 +341,9 @@ class TestSendMessageAndViews:
         )
         await MessageMetadata.objects.acreate(message=answer, route="knowledge", sources=SOURCES)
 
-        response = await AsyncClient().get(
-            f"/api/v1/chat/rooms/{self.session.session_id}/messages"
-        )
+        client = AsyncClient()
+        await client.alogin(username="sync_user", password="password123")
+        response = await client.get(f"/api/v1/chat/rooms/{self.session.session_id}/messages")
 
         messages = response.json()["messages"]
         assert messages[1]["sources"] == SOURCES

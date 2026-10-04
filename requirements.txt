@@ -8,6 +8,7 @@ python-decouple==3.8
 # API servers
 fastapi==0.135.3
 uvicorn==0.24.0
+whitenoise==6.11.0  # 운영 Django 정적 파일 서빙
 pydantic==2.12.5
 
 # HTTP and parsing

@@ -1,0 +1,17 @@
+# deploy/Caddyfile
+# 리버스 프록시: HTTPS 인증서(Let's Encrypt)를 자동으로 발급·갱신하고 Django로 전달합니다.
+# DOMAIN=localhost로 실행하면 로컬용 자체 서명 인증서를 사용합니다. (운영 전 로컬 점검용)
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	reverse_proxy django:8000 {
+		# 요청 횟수 제한에 쓰는 실제 클라이언트 IP (Django: TRUST_X_REAL_IP)
+		header_up X-Real-IP {remote_host}
+		# 채팅 답변(SSE)이 모였다가 한 번에 가지 않도록 즉시 전달합니다.
+		flush_interval -1
+	}
+
+	# 내부 상태 확인용 경로는 외부에 노출하지 않습니다.
+	respond /api/v1/core/health/ 404
+}

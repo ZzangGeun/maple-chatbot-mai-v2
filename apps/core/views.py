@@ -15,6 +15,7 @@ from typing import Any
 
 from django.conf import settings
 from django.http import HttpResponse, JsonResponse
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 
 from apps.core.services import (
@@ -32,6 +33,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
+@ensure_csrf_cookie
 def serve_react(request) -> HttpResponse:
     """
     React 빌드 결과물(index.html)을 서빙합니다.
@@ -73,6 +75,20 @@ def _extract_list(data: Any, keys: list[str]) -> list:
             if key in data and isinstance(data[key], list):
                 return data[key]
     return []
+
+
+@require_http_methods(["GET"])
+def health(request) -> JsonResponse:
+    """컨테이너 헬스체크용. DB에 연결할 수 있는지 확인합니다."""
+    from django.db import connection
+
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+    except Exception as e:
+        logger.error(f"헬스체크 DB 연결 실패: {e}")
+        return JsonResponse({"status": "error"}, status=503)
+    return JsonResponse({"status": "ok"})
 
 
 @require_http_methods(["GET"])

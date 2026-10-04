@@ -200,6 +200,10 @@ class Settings(BaseModel):
     ai_server_url: str = Field(
         default_factory=lambda: os.getenv("AI_SERVER_URL", "http://localhost:8001")
     )
+    # Django → AI 서버 내부 호출 토큰. 비우면 검사하지 않습니다(로컬 개발용, 운영에서는 반드시 설정).
+    ai_server_token: str = Field(default_factory=lambda: os.getenv("AI_SERVER_TOKEN", ""))
+    # 관리자 API(/api/v1/ai/embed/sync) 토큰. 비우면 관리자 API를 쓸 수 없습니다.
+    admin_token: str = Field(default_factory=lambda: os.getenv("AI_ADMIN_TOKEN", ""))
 
     db: DatabaseSettings = Field(default_factory=DatabaseSettings)
     model: ModelSettings = Field(default_factory=ModelSettings)

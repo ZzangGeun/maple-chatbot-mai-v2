@@ -20,6 +20,8 @@ from . import views
 app_name = "core"
 
 urlpatterns = [
+    # 헬스체크 (운영 컨테이너 상태 확인)
+    path("health/", views.health, name="health"),
     # 홈
     path("home/data/", views.home_data, name="home_data"),
     # 공지사항

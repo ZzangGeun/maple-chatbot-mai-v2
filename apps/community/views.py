@@ -1,7 +1,7 @@
 from django.db.models import Count, F, Q, Value
 from django.db.models.functions import Coalesce
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
+
 from django.views.decorators.http import require_http_methods
 
 from apps.community.models import CommunityPost
@@ -25,7 +25,6 @@ def _serialize_post(post: CommunityPost) -> dict:
     }
 
 
-@csrf_exempt
 @require_http_methods(["GET", "POST"])
 def post_list(request) -> JsonResponse:
     if request.method == "GET":

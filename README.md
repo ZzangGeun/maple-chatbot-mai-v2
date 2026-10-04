@@ -85,7 +85,18 @@ docker compose --env-file env/.env.local up --build
 
 http://localhost:8000 에서 Django가 빌드된 프론트엔드(`static/dist/`)를 서빙합니다. 마이그레이션은 컨테이너 시작 시 자동으로 실행됩니다.
 
-> 현재 Compose 구성은 개발용입니다. Django가 runserver로 실행되므로 답변이 한 번에 표시됩니다. AI 서버 이미지는 PyTorch 등을 포함해 용량이 큽니다.
+> 이 Compose 구성은 개발용입니다. Django가 runserver로 실행되므로 답변이 한 번에 표시됩니다. 운영 배포는 아래 [배포](#배포)를 참고하세요.
+
+### 배포
+
+운영은 `docker-compose.prod.yml`을 사용합니다. 클라우드 VM 1대에서 Caddy(HTTPS 자동 발급) → Django(uvicorn) → AI 서버 순으로 연결되며, DB·Redis·AI 서버는 외부에 열지 않습니다.
+
+```bash
+mkdir -p env && cp deploy/env.prod.example env/.env.prod   # 값 채우기
+docker compose -f docker-compose.prod.yml --env-file env/.env.prod up -d --build
+```
+
+서버 준비, 첫 배포, 업데이트, 백업, 오픈 전 점검 목록은 [배포 가이드](docs/infra/deployment.md)에 있습니다.
 
 ### 3. 지식 검색 데이터 준비 (선택)
 
@@ -270,7 +281,8 @@ AI 서버 설정을 불러오므로 테스트에도 `SECRET_KEY`가 있는 환�
 - **공략 문서**: `knowledge/guides/`의 문서는 모두 초안(draft)이라 기본 설정에서는 적재되지 않습니다. 확률·비용·최대 단계처럼 패치로 바뀌는 수치는 비워 두었으므로(`⚠️ 검토 필요`), 공식 자료와 대조해 채운 뒤 `status: reviewed`로 바꿔야 챗봇이 사용합니다.
 - **검색 품질 측정**: 현재 평가셋은 공략 문서와 같은 사람이 함께 만든 질문이라 수치가 실제보다 좋게 나올 수 있습니다. 실제 사용자 질문을 모아 평가셋을 늘려야 합니다.
 - **프론트엔드**: `status`, `sources` 이벤트는 아직 화면에 표시하지 않습니다.
-- **운영 배포**: 채팅 세션 소유권 확인, 요청 횟수 제한, AI 서버 내부 인증, ASGI 운영 서버 구성은 배포 전에 추가할 예정입니다.
+- **운영 보안**: 채팅 세션 소유권 확인, CSRF 검사, 메시지 전송 횟수·길이 제한, AI 서버 내부 토큰을 적용했습니다. 새 설정은 `AI_SERVER_TOKEN`, `AI_ADMIN_TOKEN`, `CHAT_RATE_LIMIT_USER`, `CHAT_RATE_LIMIT_ANON`, `CHAT_MESSAGE_MAX_CHARS`입니다. 요청 한도를 넘으면 API가 429를 돌려주며, 현재 프론트는 이를 일반 오류 문구로 보여 줍니다.
+- **CI/CD**: GitHub Actions 자동 배포는 아직 없습니다.
 
 ## 문서
 

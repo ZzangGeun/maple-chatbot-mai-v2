@@ -13,7 +13,8 @@ from asgiref.sync import sync_to_async
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
+
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 from pydantic import ValidationError
 
@@ -25,7 +26,6 @@ from common.utils.request_helpers import parse_json_body
 logger = logging.getLogger(__name__)
 
 
-@csrf_exempt
 @require_http_methods(["POST"])
 async def signup(request) -> JsonResponse:
     """
@@ -84,7 +84,6 @@ async def signup(request) -> JsonResponse:
         )
 
 
-@csrf_exempt
 @require_http_methods(["POST"])
 async def login_view(request) -> JsonResponse:
     """
@@ -142,7 +141,6 @@ async def login_view(request) -> JsonResponse:
     )
 
 
-@csrf_exempt
 @require_http_methods(["POST"])
 def logout_view(request) -> JsonResponse:
     """
@@ -160,6 +158,8 @@ def logout_view(request) -> JsonResponse:
     return JsonResponse({"message": "로그아웃되었습니다."}, status=200)
 
 
+# 프론트가 앱을 열 때 가장 먼저 부르는 API이므로, 여기서 CSRF 쿠키를 발급합니다.
+@ensure_csrf_cookie
 @require_http_methods(["GET"])
 def user_info(request) -> JsonResponse:
     """

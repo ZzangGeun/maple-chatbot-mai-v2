@@ -1,5 +1,7 @@
 # Dockerfile.django
 # Django 웹 서버를 구동하기 위한 도커 파일입니다.
+# 개발(docker-compose.yml)은 소스를 마운트하고 runserver로, 운영(docker-compose.prod.yml)은
+# 이미지에 담긴 소스와 uvicorn(ASGI)으로 실행합니다.
 
 FROM python:3.11-slim
 
@@ -7,28 +9,27 @@ FROM python:3.11-slim
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# 시스템 종속성 설치 (PostgreSQL 드라이버 빌드에 필요)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libpq-dev \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
 
-# 종속성 파일 복사 및 설치
-COPY requirements.txt .
+# Django 전용 의존성 설치 (PyTorch·LangChain 등 AI 서버 의존성은 설치하지 않습니다)
+COPY requirements-web.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir -r requirements-web.txt
 
 # 소스코드 복사
 COPY . .
 
+# 정적 파일 수집 (빌드된 프론트엔드 static/dist 포함 → staticfiles/, 운영에서 WhiteNoise가 서빙)
+# 운영 설정을 읽기 위한 값만 임시로 넣습니다. 실제 값은 실행 시 환경 변수로 주입됩니다.
+RUN DJANGO_SETTINGS_MODULE=config.settings.production SECRET_KEY=collectstatic-only ALLOWED_HOSTS=localhost \
+    python manage.py collectstatic --noinput
+
 # 포트 개방
 EXPOSE 8000
 
-# Django settings 모듈 지정 (기본값: 개발용 설정)
+# Django settings 모듈 지정 (기본값: 개발용 설정, 운영은 compose에서 production으로 지정)
 ENV DJANGO_SETTINGS_MODULE=config.settings.development
 
-# 서버 실행 (로컬 호스트 바인딩이 아닌 0.0.0.0 바인딩)
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+# 서버 실행: uvicorn(ASGI)으로 실행해야 채팅 답변 스트리밍이 실시간으로 전달됩니다.
+# WEB_CONCURRENCY로 워커 수를 조절합니다. (프록시 헤더는 같은 내부망의 리버스 프록시만 보냅니다)
+CMD ["sh", "-c", "uvicorn config.asgi:application --host 0.0.0.0 --port 8000 --workers ${WEB_CONCURRENCY:-2} --proxy-headers --forwarded-allow-ips='*'"]
